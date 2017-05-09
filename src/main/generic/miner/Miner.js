@@ -14,7 +14,32 @@ class Miner extends Observable {
 		this._hashCount = 0;
 		this._hashrate = 0;
 		this._hashrateWorker = null;
+
 	}
+
+
+	static _createWorker() {
+		return new WorkerBuilder()
+			.add(BufferUtils)
+			.add(SerialBuffer)
+			.add(CryptoLib)
+			.add(Crypto)
+			.add(Primitive)
+			.add(Hash)
+			.add(BlockHeader)
+			.main(Miner._worker)
+			.build();
+	}
+
+	static _worker() {
+		const self = this;
+		self.onmessage = function(e) {
+			console.log('Worker received message: ' + e.data);
+			self.postMessage('Response: ' + e.data);
+		};
+	}
+
+
 
 	// XXX Cleanup
 	static configureSpeed(iterations) {
@@ -44,7 +69,18 @@ class Miner extends Observable {
 		this.fire('start', this);
 
 		// Kick off the mining process.
-		this._startWork();
+		//this._startWork();
+
+		// XXX Test
+		var blob = (window.URL ? URL : webkitURL).createObjectURL(Miner._createWorker(), {
+			type: 'application/javascript; charset=utf-8'
+		});
+
+		console.log(blob);
+
+		this._worker = new Worker(blob);
+		this._worker.onmessage = e => console.log('Worker said: ' + e.data);
+		this._worker.postMessage('test123');
 	}
 
 	async _startWork() {

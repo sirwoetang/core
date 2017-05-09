@@ -58,7 +58,7 @@ class BlockHeader {
     }
 
     verifyProofOfWork() {
-        // Verify that trailingZeros(hash) == difficulty
+        // Verify that leadingZeros(hash) == difficulty
         return this.hash().then( hash => {
             const zeroBytes = Math.floor(this.difficulty / 8);
             for (let i = 0; i < zeroBytes; i++) {
@@ -111,8 +111,8 @@ class BlockHeader {
 
     // XXX The miner changes the nonce of an existing BlockHeader during the
     // mining process.
-    set nonce(n) {
-        this._nonce = n;
+    set nonce(value) {
+        this._nonce = value;
         this._hash = null;
     }
 
