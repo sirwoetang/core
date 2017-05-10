@@ -56,12 +56,12 @@ class BlockHeader {
             + /*nonce*/ 8;
     }
 
-    verifyProofOfWork() {
-        return this.hash()
+    verifyProofOfWork(buf) {
+        return this.hash(buf)
             .then( hash => BlockHeader.isProofOfWork(hash, this.difficulty));
     }
 
-    async hash() {
+    async hash(buf) {
         this._hash = this._hash || await Crypto.sha256(this.serialize());
         return this._hash;
     }
@@ -74,6 +74,17 @@ class BlockHeader {
             && this._difficulty === o.difficulty
             && this._timestamp === o.timestamp
             && this._nonce === o.nonce;
+    }
+
+    toString() {
+        return `BlockHeader{`
+            + `prevHash=${this._prevHash}, `
+            + `bodyHash=${this._bodyHash}, `
+            + `accountsHash=${this._accountsHash}, `
+            + `difficulty=${this._difficulty}, `
+            + `timestamp=${this._timestamp}, `
+            + `nonce=${this._nonce}`
+            + `}`;
     }
 
     get prevHash() {

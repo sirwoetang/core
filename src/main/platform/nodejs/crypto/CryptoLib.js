@@ -1,8 +1,11 @@
 const WebCrypto = require("node-webcrypto-ossl");
-const WebCrypto_instance = new WebCrypto({
+global.webcrypto = new WebCrypto({
     directory: "database/keys"
 });
 
-const CryptoLib = {
-    instance: WebCrypto_instance
-};
+class CryptoLib {
+    static get instance() {
+        return global.webcrypto.subtle;
+    }
+}
+Class.register(CryptoLib);

@@ -68,15 +68,14 @@ class Miner extends Observable {
 		// Construct next block.
 		this._block = await this._getNextBlock();
 
-		console.log('Miner starting work on prevHash=' + this._block.prevHash.toBase64() + ', accountsHash=' + this._block.accountsHash.toBase64() + ', difficulty=' + this._block.difficulty + ', transactionCount=' + this._block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
+		//console.log('Miner starting work on prevHash=' + this._block.prevHash.toBase64() + ', accountsHash=' + this._block.accountsHash.toBase64() + ', difficulty=' + this._block.difficulty + ', transactionCount=' + this._block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
 
 		// Tell the worker to start hashing.
 		this._worker.postMessage(this._block.header);
 	}
 
 	_createWorker() {
-		// Create the source code of the worker.
-		const source = new WorkerBuilder()
+		return new WorkerBuilder()
 			.add(BufferUtils)
 			.add(SerialBuffer)
 			.add(ObjectUtils)
@@ -88,16 +87,6 @@ class Miner extends Observable {
 			.add(MiningWorker)
 			.main(Miner._workerMain)
 			.build();
-
-		// Put it into a blob.
-		// TODO Blob backwards compatbility (BlobBuilder)
-		const blob = new Blob([source], {type: 'application/javascript'});
-
-		// Create a object url for the blob.
-		const objUrl = (window.URL ? URL : webkitURL).createObjectURL(blob);
-
-		// Create the webworker.
-		return new Worker(objUrl);
 	}
 
 	static _workerMain() {
@@ -115,8 +104,11 @@ class Miner extends Observable {
 			// Set the nonce in the current block header.
 			this._block.header.nonce = msg.nonce;
 
+			console.log('Got nonce from worker: ' + this._block.header.nonce + ', header=' + this._block.header.toString() + ', _hash=' + this._block.header._hash);
+
 			// Report our great success.
-			const hash = await this._block.hash();
+			const hash = await this._block.header.hash();
+			console.log('after hash: ' + this._block.header.nonce + ', _hash=' + this._block.header._hash);
 			console.log('MINED BLOCK!!! nonce=' + this._block.nonce + ', difficulty=' + this._block.difficulty + ', hash=' + hash.toBase64() + ', transactionCount=' + this._block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
 
 			// Tell listeners that we've mined a block.
@@ -129,6 +121,8 @@ class Miner extends Observable {
 		else if (msg.hashrate !== undefined) {
 			this._hashrate = msg.hashrate;
 			this.fire('hashrate-changed', this._hashrate, this);
+
+			if (!PlatformUtils.isBrowser()) console.log('Hashrate: ' + this._hashrate + ' H/s');
 		}
 		// Invalid message
 		else {

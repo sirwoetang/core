@@ -22,6 +22,14 @@ class WorkerBuilder {
     }
 
     build() {
-        return this._code;
+		// Put it the source into a blob.
+		// TODO Blob backwards compatbility (BlobBuilder)
+		const blob = new Blob([source], {type: 'application/javascript'});
+
+		// Create a object url for the blob.
+		const objUrl = (window.URL ? URL : webkitURL).createObjectURL(blob);
+
+		// Create the webworker.
+		return new Worker(objUrl);
     }
 }

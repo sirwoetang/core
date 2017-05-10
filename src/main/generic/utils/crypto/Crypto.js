@@ -58,3 +58,4 @@ class Crypto {
             .then(key => Crypto.lib.verify(Crypto.settings.sign, key, signature, data));
     }
 }
+Class.register(Crypto);
