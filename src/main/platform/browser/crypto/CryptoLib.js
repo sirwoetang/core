@@ -1,5 +1,6 @@
 class CryptoLib {
     static get instance() {
-        return window.crypto.subtle;
+        return typeof window !== 'undefined' ?
+            window.crypto.subtle : self.crypto.subtle;
     }
 }

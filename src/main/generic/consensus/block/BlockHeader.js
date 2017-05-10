@@ -1,5 +1,4 @@
 class BlockHeader {
-
     constructor(prevHash, bodyHash, accountsHash, difficulty, timestamp, nonce) {
         if (!Hash.isHash(prevHash)) throw 'Malformed prevHash';
         if (!Hash.isHash(bodyHash)) throw 'Malformed bodyHash';
@@ -58,16 +57,8 @@ class BlockHeader {
     }
 
     verifyProofOfWork() {
-        // Verify that leadingZeros(hash) == difficulty
-        return this.hash().then( hash => {
-            const zeroBytes = Math.floor(this.difficulty / 8);
-            for (let i = 0; i < zeroBytes; i++) {
-                if (hash[i] !== 0) return false;
-            }
-            const zeroBits = this.difficulty % 8;
-            if (zeroBits && hash[zeroBytes] > Math.pow(2, 8 - zeroBits)) return false;
-            return true;
-        });
+        return this.hash()
+            .then( hash => BlockHeader.isProofOfWork(hash, this.difficulty));
     }
 
     async hash() {
@@ -114,6 +105,26 @@ class BlockHeader {
     set nonce(value) {
         this._nonce = value;
         this._hash = null;
+    }
+
+    // XXX Testing
+    static setNonce(buffer, nonce) {
+        const writePos = buffer.writePos;
+        buffer.writePos = 108;
+        buffer.writeUint64(nonce);
+        buffer.writePos = writePos;
+    }
+
+    // XXX Testing
+    // Verify that leadingZeros(hash) == difficulty
+    static isProofOfWork(hash, difficulty) {
+        const zeroBytes = Math.floor(difficulty / 8);
+        for (let i = 0; i < zeroBytes; i++) {
+            if (hash[i] !== 0) return false;
+        }
+        const zeroBits = difficulty % 8;
+        if (zeroBits && hash[zeroBytes] > Math.pow(2, 8 - zeroBits)) return false;
+        return true;
     }
 
     log(desc) {

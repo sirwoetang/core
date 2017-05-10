@@ -1,5 +1,5 @@
 class Miner extends Observable {
-	constructor(minerAddress, blockchain, mempool) {
+	constructor(blockchain, mempool, minerAddress) {
 		super();
 		this._blockchain = blockchain;
 		this._mempool = mempool;
@@ -10,47 +10,14 @@ class Miner extends Observable {
 			console.warn('No miner address set');
 		}
 
+		// The webworker instance doing all the heavy lifting.
 		this._worker = null;
-		this._hashCount = 0;
+
+		// The rate the worker is hashing at.
 		this._hashrate = 0;
-		this._hashrateWorker = null;
 
-	}
-
-
-	static _createWorker() {
-		return new WorkerBuilder()
-			.add(BufferUtils)
-			.add(SerialBuffer)
-			.add(CryptoLib)
-			.add(Crypto)
-			.add(Primitive)
-			.add(Hash)
-			.add(BlockHeader)
-			.main(Miner._worker)
-			.build();
-	}
-
-	static _worker() {
-		const self = this;
-		self.onmessage = function(e) {
-			console.log('Worker received message: ' + e.data);
-			self.postMessage('Response: ' + e.data);
-		};
-	}
-
-
-
-	// XXX Cleanup
-	static configureSpeed(iterations) {
-		Miner._iterations = iterations || 75;
-	}
-
-	startWork() {
-		if (this.working) {
-			console.warn('Miner already working');
-			return;
-		}
+		// The block we are currently mining on.
+		this._block = null;
 
 		// Listen to changes in the mempool which evicts invalid transactions
 		// after every blockchain head change and then fires 'transactions-ready'
@@ -60,86 +27,113 @@ class Miner extends Observable {
 
 		// Immediately start processing transactions when they come in.
 		this._mempool.on('transaction-added', () => this._startWork());
+	}
 
-		// Initialize hashrate computation.
-		this._hashCount = 0;
-		this._hashrateWorker = setInterval( () => this._updateHashrate(), 5000);
+	startWork() {
+		if (this.working) {
+			console.warn('Miner already working');
+			return;
+		}
+
+		// Initialize the webworker that is going to do the actual mining.
+		this._worker = this._createWorker();
+		this._worker.onmessage = msg => this._onMessage(msg.data);
 
 		// Tell listeners that we've started working.
 		this.fire('start', this);
 
 		// Kick off the mining process.
-		//this._startWork();
-
-		// XXX Test
-		var blob = (window.URL ? URL : webkitURL).createObjectURL(Miner._createWorker(), {
-			type: 'application/javascript; charset=utf-8'
-		});
-
-		console.log(blob);
-
-		this._worker = new Worker(blob);
-		this._worker.onmessage = e => console.log('Worker said: ' + e.data);
-		this._worker.postMessage('test123');
+		this._startWork();
 	}
+
+	stopWork() {
+		if (this._worker) {
+			this._worker.terminate();
+			this._worker = null;
+		}
+
+		this._hashrate = 0;
+
+		console.log('Miner stopped work');
+
+		// Tell listeners that we've stopped working.
+		this.fire('stop', this);
+	}
+
 
 	async _startWork() {
-		// XXX Needed as long as we cannot unregister from transactions-ready events.
-		if (!this.working) {
-			return;
-		}
-
-		if (this._worker) {
-			clearTimeout(this._worker);
-		}
+		// XXX Needed as long as we cannot unregister from transactions-ready/added events.
+		if (!this.working) return;
 
 		// Construct next block.
-		const nextBlock = await this._getNextBlock();
+		this._block = await this._getNextBlock();
 
-		console.log('Miner starting work on prevHash=' + nextBlock.prevHash.toBase64() + ', accountsHash=' + nextBlock.accountsHash.toBase64() + ', difficulty=' + nextBlock.difficulty + ', transactionCount=' + nextBlock.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
+		console.log('Miner starting work on prevHash=' + this._block.prevHash.toBase64() + ', accountsHash=' + this._block.accountsHash.toBase64() + ', difficulty=' + this._block.difficulty + ', transactionCount=' + this._block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
 
-		// Start hashing.
-		this._worker = setTimeout( () => this._tryNonces(nextBlock), 0);
+		// Tell the worker to start hashing.
+		this._worker.postMessage(this._block.header);
 	}
 
-	async _tryNonces(block) {
-		// If the blockchain head has changed in the meantime, abort.
-		if (!this._blockchain.headHash.equals(block.prevHash)) {
-			return;
+	_createWorker() {
+		// Create the source code of the worker.
+		const source = new WorkerBuilder()
+			.add(BufferUtils)
+			.add(SerialBuffer)
+			.add(ObjectUtils)
+			.add(CryptoLib)
+			.add(Crypto)
+			.add(Primitive)
+			.add(Hash)
+			.add(BlockHeader)
+			.add(MiningWorker)
+			.main(Miner._workerMain)
+			.build();
+
+		// Put it into a blob.
+		// TODO Blob backwards compatbility (BlobBuilder)
+		const blob = new Blob([source], {type: 'application/javascript'});
+
+		// Create a object url for the blob.
+		const objUrl = (window.URL ? URL : webkitURL).createObjectURL(blob);
+
+		// Create the webworker.
+		return new Worker(objUrl);
+	}
+
+	static _workerMain() {
+		const self = this;
+		MiningWorker.init(self);
+	}
+
+	async _onMessage(msg) {
+		// We expect two types of messages from the worker:
+		// - nonce: The worker has found a valid nonce for the current block.
+		// - hashrate: The worker is reporting its hashrate.
+
+		// Nonce
+		if (msg.nonce !== undefined) {
+			// Set the nonce in the current block header.
+			this._block.header.nonce = msg.nonce;
+
+			// Report our great success.
+			const hash = await this._block.hash();
+			console.log('MINED BLOCK!!! nonce=' + this._block.nonce + ', difficulty=' + this._block.difficulty + ', hash=' + hash.toBase64() + ', transactionCount=' + this._block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
+
+			// Tell listeners that we've mined a block.
+			this.fire('block-mined', this._block, this);
+
+			// Push block into blockchain.
+			await this._blockchain.pushBlock(this._block);
 		}
-
-		// If we are supposed to stop working, abort.
-		if (!this.working) {
-			return;
+		// Hashrate
+		else if (msg.hashrate !== undefined) {
+			this._hashrate = msg.hashrate;
+			this.fire('hashrate-changed', this._hashrate, this);
 		}
-
-		// Play with the number of iterations to adjust hashrate vs. responsiveness.
-		for (let i = 0; i < Miner._iterations; ++i) {
-			let isPoW = await block.header.verifyProofOfWork();
-			this._hashCount++;
-
-			if (isPoW) {
-				const hash = await block.hash();
-				console.log('MINED BLOCK!!! nonce=' + block.nonce + ', difficulty=' + block.difficulty + ', hash=' + hash.toBase64() + ', transactionCount=' + block.transactionCount + ', hashrate=' + this._hashrate + ' H/s');
-
-				// Tell listeners that we've mined a block.
-				this.fire('block-mined', block, this);
-
-				// Reset worker state.
-				clearTimeout(this._worker);
-				this._worker = null;
-
-				// Push block into blockchain.
-				await this._blockchain.pushBlock(block);
-
-				// We will resume work when the blockchain updates.
-				return;
-			}
-
-			block.header.nonce += 1;
+		// Invalid message
+		else {
+			console.error('Invalid message received from mining worker', msg);
 		}
-
-		this._worker = setTimeout( () => this._tryNonces(block), 0);
 	}
 
 	async _getNextBlock() {
@@ -169,53 +163,16 @@ class Miner extends Observable {
 		return Math.floor(Date.now() / 1000);
 	}
 
-	stopWork() {
-		// TODO unregister from head-changed events
-		this._stopWork();
-
-		console.log('Miner stopped work');
-
-		// Tell listeners that we've stopped working.
-		this.fire('stop', this);
-	}
-
-	_stopWork() {
-		// TODO unregister from blockchain head-changed events.
-
-		if (this._worker) {
-			clearTimeout(this._worker);
-			this._worker = null;
-		}
-		if (this._hashrateWorker) {
-			clearInterval(this._hashrateWorker);
-			this._hashrateWorker = null;
-		}
-
-		this._hashCount = 0;
-		this._hashrate = 0;
-	}
-
-	_updateHashrate() {
-		// Called in 5 second intervals
-		this._hashrate = Math.round(this._hashCount / 5);
-		this._hashCount = 0;
-
-		// Tell listeners about our new hashrate.
-		this.fire('hashrate-changed', this._hashrate, this);
-	}
-
 	get address() {
 		return this._address;
 	}
 
 	get working() {
-		return !!this._hashrateWorker;
+		return !!this._worker;
 	}
 
 	get hashrate() {
 		return this._hashrate;
 	}
 }
-// XXX Move to configuration
-Miner._iterations = 75;
 Class.register(Miner);
