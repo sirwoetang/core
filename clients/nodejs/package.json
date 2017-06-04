@@ -10,6 +10,10 @@
   "license": "ISC",
   "dependencies": {
     "minimist": "^1.2.0",
-    "nimiq": "git+ssh://git@github.com/nimiq-network/core.git"
+    "nimiq": "git+ssh://git@github.com/nimiq-network/core.git",
+    "fs": "0.0.1-security",
+    "greenlock": "^2.1.15",
+    "le-challenge-standalone": "^2.1.0",
+    "le-store-certbot": "^2.0.5"
   }
 }
