@@ -1,8 +1,9 @@
 class Consensus extends Observable {
-    constructor(blockchain, mempool, network) {
+    constructor(blockchain, mempool, network, behavior) {
         super();
         this._blockchain = blockchain;
         this._mempool = mempool;
+        this._behavior = behavior;
 
         this._agents = new HashMap();
         this._timers = new Timers();
@@ -35,7 +36,7 @@ class Consensus extends Observable {
 
     _onPeerJoined(peer) {
         // Create a ConsensusAgent for each peer that connects.
-        const agent = new ConsensusAgent(this._blockchain, this._mempool, peer);
+        const agent = new ConsensusAgent(this._blockchain, this._mempool, peer, this._behavior);
         this._agents.put(peer.id, agent);
 
         // If no more peers connect within the specified timeout, start syncing.

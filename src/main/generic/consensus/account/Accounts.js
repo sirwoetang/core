@@ -14,9 +14,10 @@ class Accounts extends Observable {
         return new Accounts(tree);
     }
 
-    constructor(accountsTree) {
+    constructor(accountsTree, behavior) {
         super();
         this._tree = accountsTree;
+        this._behavior = behavior;
 
         // Forward balance change events to listeners registered on this Observable.
         this.bubble(this._tree, '*');
@@ -56,6 +57,19 @@ class Accounts extends Observable {
             return account.balance;
         } else {
             return Account.INITIAL.balance;
+        }
+    }
+
+    async populate(nodes) {
+        if (this._behavior === Core.Behavior.Full) throw 'AccountsTree population is not required in Full mode.';
+        const treeTx = await this._tree.transaction();
+        await this._tree.populate(nodes, treeTx);
+        if (await this._tree.verify(treeTx)) {
+            await treeTx.commit();
+            this.fire('populated');
+            return true;
+        } else {
+            return false;
         }
     }
 

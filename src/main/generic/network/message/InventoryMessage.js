@@ -59,7 +59,8 @@ class InvVector {
 InvVector.Type = {
     ERROR: 0,
     TRANSACTION: 1,
-    BLOCK: 2
+    BLOCK: 2,
+    BALANCE: 3
 };
 Class.register(InvVector);
 

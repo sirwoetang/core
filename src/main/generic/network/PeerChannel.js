@@ -12,7 +12,7 @@ class PeerChannel extends Observable {
         let msg;
         try {
             msg = MessageFactory.parse(rawMsg);
-        } catch(e) {
+        } catch (e) {
             Log.w(PeerChannel, `Failed to parse message from ${this.peerAddress || this.netAddress}: ${e}`);
 
             // Ban client if it sends junk.
@@ -58,24 +58,32 @@ class PeerChannel extends Observable {
         return this._send(new InvMessage(vectors));
     }
 
-    notfound(vectors) {
-        return this._send(new NotFoundMessage(vectors));
-    }
-
     getdata(vectors) {
         return this._send(new GetDataMessage(vectors));
     }
 
-    block(block) {
-        return this._send(new BlockMessage(block));
+    notfound(vectors) {
+        return this._send(new NotFoundMessage(vectors));
+    }
+
+    getblocks(hashes, hashStop = new Hash(null)) {
+        return this._send(new GetBlocksMessage(hashes, hashStop));
+    }
+
+    getheaders(hashes, hashStop = new Hash(null), maxNum = HeadersMessage.LENGTH_MAX, reverseDirection = false) {
+        return this._send(new GetHeadersMessage(hashes, hashStop, maxNum, reverseDirection));
     }
 
     tx(transaction) {
         return this._send(new TxMessage(transaction));
     }
 
-    getblocks(hashes, hashStop = new Hash(null)) {
-        return this._send(new GetBlocksMessage(hashes, hashStop));
+    block(block) {
+        return this._send(new BlockMessage(block));
+    }
+
+    headers(headers) {
+        return this._send(new HeadersMessage(headers));
     }
 
     mempool() {
@@ -104,6 +112,14 @@ class PeerChannel extends Observable {
 
     signal(senderId, recipientId, nonce, ttl, flags, payload) {
         return this._send(new SignalMessage(senderId, recipientId, nonce, ttl, flags, payload));
+    }
+
+    getaccounts(addresses) {
+        return this._send(new GetAccountsMessage(addresses));
+    }
+
+    accounts(nodes) {
+        return this._send(new AccountsMessage(nodes));
     }
 
     equals(o) {

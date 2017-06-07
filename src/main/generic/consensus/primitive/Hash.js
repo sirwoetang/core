@@ -48,4 +48,5 @@ class Hash extends Primitive {
         return o instanceof Hash;
     }
 }
+Hash.NULL = new Hash(null);
 Class.register(Hash);

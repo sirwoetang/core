@@ -9,7 +9,7 @@ class TestBlockchain extends Blockchain {
     }
 
     constructor(store, accounts, users) {
-        const thisPromise = super(store, accounts);
+        const thisPromise = super(store, accounts, Proofchain.createVolatile());
 
         return thisPromise.then((superThis) => {
             superThis._users = users;

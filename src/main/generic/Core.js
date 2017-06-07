@@ -1,9 +1,9 @@
 class Core {
-    constructor() {
-        return this._init();
+    constructor(behavior = Core.Behavior.Full) {
+        return this._init(behavior);
     }
 
-    async _init() {
+    async _init(behavior) {
         // Model
         this.accounts = await Accounts.getPersistent();
         this.blockchain = await Blockchain.getPersistent(this.accounts);
@@ -13,7 +13,7 @@ class Core {
         this.network = await new Network(this.blockchain);
 
         // Consensus
-        this.consensus = new Consensus(this.blockchain, this.mempool, this.network);
+        this.consensus = new Consensus(this.blockchain, this.mempool, this.network, behavior);
 
         // Wallet
         this.wallet = await Wallet.getPersistent();
@@ -25,4 +25,9 @@ class Core {
         return this;
     }
 }
+Core.Behavior = {
+    Full: 0,
+    Mini: 1,
+    Nano: 2
+};
 Class.register(Core);

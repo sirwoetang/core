@@ -1,9 +1,10 @@
 class ConsensusAgent extends Observable {
-    constructor(blockchain, mempool, peer) {
+    constructor(blockchain, mempool, peer, behavior) {
         super();
         this._blockchain = blockchain;
         this._mempool = mempool;
         this._peer = peer;
+        this._behavior = behavior;
 
         // Flag indicating that we are currently syncing our blockchain with the peer's.
         this._syncing = false;
@@ -31,13 +32,17 @@ class ConsensusAgent extends Observable {
         this._timers = new Timers();
 
         // Listen to consensus messages from the peer.
-        peer.channel.on('inv',          msg => this._onInv(msg));
-        peer.channel.on('getdata',      msg => this._onGetData(msg));
-        peer.channel.on('notfound',     msg => this._onNotFound(msg));
-        peer.channel.on('block',        msg => this._onBlock(msg));
-        peer.channel.on('tx',           msg => this._onTx(msg));
-        peer.channel.on('getblocks',    msg => this._onGetBlocks(msg));
-        peer.channel.on('mempool',      msg => this._onMempool(msg));
+        peer.channel.on('inv', msg => this._onInv(msg));
+        peer.channel.on('getdata', msg => this._onGetData(msg));
+        peer.channel.on('notfound', msg => this._onNotFound(msg));
+        peer.channel.on('block', msg => this._onBlock(msg));
+        peer.channel.on('tx', msg => this._onTx(msg));
+        peer.channel.on('headers', msg => this._onHeaders(msg));
+        peer.channel.on('getblocks', msg => this._onGetBlocks(msg));
+        peer.channel.on('getheaders', msg => this._onGetHeaders(msg));
+        peer.channel.on('mempool', msg => this._onMempool(msg));
+        peer.channel.on('getaccounts', msg => this._onGetAccounts(msg));
+        peer.channel.on('accounts', msg => this._onAccounts(msg));
 
         // Clean up when the peer disconnects.
         peer.channel.on('close', () => this._onClose());
@@ -64,6 +69,8 @@ class ConsensusAgent extends Observable {
         if (this._knownObjects.contains(vector)) {
             return;
         }
+
+        // TODO: Also report all the new balances?
 
         // Relay block to peer.
         this._peer.channel.inv([vector]);
@@ -103,7 +110,7 @@ class ConsensusAgent extends Observable {
         else if (this._lastChainHeight === this._blockchain.height) {
             this._failedSyncs++;
             if (this._failedSyncs < ConsensusAgent.MAX_SYNC_ATTEMPTS) {
-                this._requestBlocks();
+                this._request();
             } else {
                 this._peer.channel.ban('blockchain sync failed');
             }
@@ -111,7 +118,7 @@ class ConsensusAgent extends Observable {
         // If the peer has a longer chain than us, request blocks from it.
         else if (this._blockchain.height < this._peer.startHeight) {
             this._lastChainHeight = this._blockchain.height;
-            this._requestBlocks();
+            this._request();
         }
         // The peer has a shorter chain than us.
         // TODO what do we do here?
@@ -133,10 +140,50 @@ class ConsensusAgent extends Observable {
         }
     }
 
+    _request() {
+        if (this._behavior === Core.Behavior.Full) {
+            this._requestBlocks();
+        } else if (this._behavior === Core.Behavior.Mini) {
+            // TODO
+            // Current behavior: Download 500 latest headers. Verify PoW. [TODO: Download and verify latest 20 full blocks]
+            this._requestHeaders();
+        }
+    }
+
+    async _requestHeaders() {
+        // XXX Only one getheaders request at a time.
+        if (this._timers.timeoutExists('getheaders')) {
+            Log.e(ConsensusAgent, 'Duplicate _requestHeaders()');
+            return;
+        }
+
+        const hashes = [];
+        let step = 1;
+        for (let i = await this._blockchain._proofchain.getHeight() - 1; i > 0; i -= step) {
+            // Push top 10 hashes first, then back off exponentially.
+            if (hashes.length >= 10) {
+                step *= 2;
+            }
+            const hash = this._blockchain._proofchain._path[i];
+            if (hash) hashes.push(hash);
+        }
+
+        // Push the genesis block hash.
+        hashes.push(Block.GENESIS.HASH);
+
+        // Request blocks from peer.
+        this._peer.channel.getheaders(hashes, Hash.NULL, 500, true);
+
+        this._timers.setTimeout('getheaders', () => {
+            this._timers.clearTimeout('getheaders');
+            this._peer.channel.close('getheaders timeout');
+        }, ConsensusAgent.REQUEST_TIMEOUT);
+    }
+
     _requestBlocks() {
         // XXX Only one getblocks request at a time.
         if (this._timers.timeoutExists('getblocks')) {
-            Log.e(ConsensusAgent, `Duplicate _requestBlocks()`);
+            Log.e(ConsensusAgent, 'Duplicate _requestBlocks()');
             return;
         }
 
@@ -223,6 +270,27 @@ class ConsensusAgent extends Observable {
             // XXX The peer is weird. Give him another chance.
             this._noMoreData();
         }
+    }
+
+    async _onHeaders(msg) {
+        this._timers.clearTimeout('getheaders');
+        // TODO XXX
+        try {
+            const proofchain = await Proofchain.createVolatile();
+            await proofchain.pushAll(msg.headers);
+
+            // If it would be bad it had failed here
+            await this._blockchain.proofchain.pushAll(msg.headers);
+        } catch (e) {
+            console.log(e);
+            this._peer.channel.ban('received invalid headers');
+            return;
+        }
+    }
+
+    async _onAccounts(msg) {
+        this._timers.clearTimeout('getaccounts');
+        await this._blockchain.populateAccountsTree(msg.nodes);
     }
 
     _requestData() {
@@ -393,8 +461,8 @@ class ConsensusAgent extends Observable {
         // chain, ignore the rest. If none of the requested hashes is found,
         // pick the genesis block hash. Send the main chain starting from the
         // picked hash back to the peer.
-        // TODO honor hashStop argument
         const mainPath = this._blockchain.path;
+        const hashStopIndex = mainPath.indexOf(msg.hashStop);
         let startIndex = -1;
 
         for (const hash of msg.hashes) {
@@ -435,7 +503,7 @@ class ConsensusAgent extends Observable {
 
         // Collect up to GETBLOCKS_VECTORS_MAX inventory vectors for the blocks starting right
         // after the identified block on the main chain.
-        const stopIndex = Math.min(mainPath.length - 1, startIndex + ConsensusAgent.GETBLOCKS_VECTORS_MAX);
+        const stopIndex = Math.min(hashStopIndex > 0 ? hashStopIndex : (mainPath.length - 1), startIndex + ConsensusAgent.GETBLOCKS_VECTORS_MAX);
         const vectors = [];
         for (let i = startIndex + 1; i <= stopIndex; ++i) {
             vectors.push(new InvVector(InvVector.Type.BLOCK, mainPath[i]));
@@ -443,6 +511,53 @@ class ConsensusAgent extends Observable {
 
         // Send the vectors back to the requesting peer.
         this._peer.channel.inv(vectors);
+    }
+
+    async _onGetHeaders(msg) {
+        Log.v(ConsensusAgent, `[GETHEADERS] ${msg.hashes.length} block locators received from ${this._peer.peerAddress}`);
+
+        const mainPath = this._blockchain.proofchain.path;
+        const hashStopIndex = mainPath.indexOf(msg.hashStop);
+        let startIndex = -1;
+
+        for (const hash of msg.hashes) {
+            // Shortcut for genesis block which will be the only block sent by
+            // fresh peers.
+            if (Block.GENESIS.HASH.equals(hash)) {
+                startIndex = 0;
+                break;
+            }
+
+            // Check if we know the requested header.
+            const header = await this._blockchain.getHeader(hash);
+
+            // If we don't know the block, try the next one.
+            if (!header) continue;
+
+            // If the block is not on our main chain, try the next one.
+            // mainPath is an IndexedArray with constant-time .indexOf()
+            startIndex = mainPath.indexOf(hash);
+            if (startIndex < 0) continue;
+
+            // We found a block, ignore remaining block locator hashes.
+            break;
+        }
+
+        let stopIndex;
+        if (msg.reverseDirection) {
+            stopIndex = hashStopIndex > 0 ? hashStopIndex : (mainPath.length - 1);
+            startIndex = Math.max(startIndex, stopIndex - msg.maxNum);
+        } else {
+            stopIndex = Math.min(hashStopIndex > 0 ? hashStopIndex : (mainPath.length - 1), startIndex + msg.maxNum);
+        }
+
+        const headers = [];
+        for (let i = startIndex + 1; i <= stopIndex; ++i) {
+            const header = await this._blockchain.getHeader(mainPath[i]);
+            if (header) headers.push(header);
+        }
+
+        this._peer.channel.headers(headers);
     }
 
     async _onMempool(msg) {
@@ -453,6 +568,17 @@ class ConsensusAgent extends Observable {
         for (const tx of transactions) {
             this._peer.channel.tx(tx);
         }
+    }
+
+    async _onGetAccounts(msg) {
+        const multi = this._blockchain.getAccountSlices(msg.addresses);
+        const res = [];
+        for (const slice of multi) {
+            for (const node of slice) {
+                if (res.indexOf(node) >= 0) res.push(node);
+            }
+        }
+        this._peer.channel.accounts(res);
     }
 
     _onClose() {

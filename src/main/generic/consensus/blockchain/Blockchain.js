@@ -1,18 +1,21 @@
 class Blockchain extends Observable {
-    static getPersistent(accounts) {
+    static async getPersistent(accounts) {
         const store = BlockchainStore.getPersistent();
-        return new Blockchain(store, accounts);
+        const proofchain = Proofchain.getPersistent();
+        return new Blockchain(store, accounts, proofchain);
     }
 
-    static createVolatile(accounts) {
+    static async createVolatile(accounts) {
         const store = BlockchainStore.createVolatile();
-        return new Blockchain(store, accounts);
+        const proofchain = Proofchain.createVolatile();
+        return new Blockchain(store, accounts, proofchain);
     }
 
-    constructor(store, accounts) {
+    constructor(store, accounts, proofchain) {
         super();
         this._store = store;
         this._accounts = accounts;
+        this._proofchain = proofchain;
 
         this._mainChain = null;
         this._mainPath = null;
@@ -30,6 +33,8 @@ class Blockchain extends Observable {
     async _init() {
         // Load the main chain from storage.
         this._mainChain = await this._store.getMainChain();
+
+        this._proofchain.init();
 
         // If we don't know any chains, start with the genesis chain.
         if (!this._mainChain) {
@@ -89,6 +94,31 @@ class Blockchain extends Observable {
         return new Promise((resolve, error) => {
             this._synchronizer.push(() => {
                 return this._pushBlock(block);
+            }, resolve, error);
+        });
+    }
+
+    getAccountSlices(addresses) {
+        return new Promise((resolve, error) => {
+            this._synchronizer.push(() => {
+                const res = [];
+                for (const address of addresses) {
+                    res.push(this._accounts.getSlice(address));
+                }
+                return res;
+            }, resolve, error);
+        });
+    }
+
+    populateAccountsTree(nodes) {
+        return new Promise((resolve, error) => {
+            this._synchronizer.push(async () => {
+                if ((await nodes[0].hash()).equals(await this._mainChain.hash())) return;
+                const accounts = this.createTemporaryAccounts();
+                if (await accounts.populate(nodes)) {
+                    // TODO: this._accounts.cleanup();
+                    await this._accounts.populate(nodes);
+                }
             }, resolve, error);
         });
     }
@@ -276,6 +306,7 @@ class Blockchain extends Observable {
         this._mainPath.push(headHash);
         this._headHash = headHash;
         await this._store.setMainChain(this._mainChain);
+        await this._proofchain.push(this._mainChain.head.header);
 
         return true;
     }
@@ -303,6 +334,7 @@ class Blockchain extends Observable {
         this._mainPath.pop();
         this._headHash = prevHash;
         await this._store.setMainChain(this._mainChain);
+        await this._proofchain.revert();
 
         // XXX Sanity check: Assert that the accountsHash now matches the
         // accountsHash of the current head.
@@ -341,6 +373,10 @@ class Blockchain extends Observable {
             await this._revert(); // eslint-disable-line no-await-in-loop
         }
 
+        if (!this._proofchain.getMainHead()) {
+            await this._proofchain.restart(await this._store.get(forkHead.prevHash.toBase64()));
+        }
+
         // We have reverted to the common ancestor state. Apply all blocks on
         // the fork chain until we reach the new head.
         for (const chain of forkChain) {
@@ -353,6 +389,13 @@ class Blockchain extends Observable {
     async getBlock(hash) {
         const chain = await this._store.get(hash.toBase64());
         return chain ? chain.head : null;
+    }
+
+    async getHeader(hash) {
+        const header = this._proofchain.getHeader(hash);
+        if (header) return header;
+        const block = this.getBlock(hash);
+        return block ? block.header : null;
     }
 
     async getNextCompactTarget(chain) {
@@ -422,6 +465,10 @@ class Blockchain extends Observable {
 
     get busy() {
         return this._synchronizer.working;
+    }
+
+    get proofchain() {
+        return this._proofchain;
     }
 
     accountsHash() {

@@ -112,7 +112,7 @@ Message.Type = {
     SENDHEADERS: 'sendheaders',
 
     // Nimiq
-    GETBALANCES: 'getbalances',
-    BALANCES: 'balances'
+    GETACCOUNTS: 'getaccounts',
+    ACCOUNTS: 'balances'
 };
 Class.register(Message);

@@ -189,6 +189,41 @@ class AccountsTree extends Observable {
         return nodeKey;
     }
 
+    async populate(nodes, transaction) {
+        transaction = transaction || this._store;
+
+        for (const node of nodes) {
+            await transaction.put(node);
+        }
+        transaction.setRootKey(await nodes[0].hash());
+    }
+
+    async verify(transaction) {
+        transaction = transaction || this._store;
+
+        // Fetch the root node. This should never fail.
+        const rootKey = await transaction.getRootKey();
+        const rootNode = await transaction.get(rootKey);
+
+        return this._verify(rootNode, transaction);
+    }
+
+    async _verify(node, transaction) {
+        if (!node) return true;
+        transaction = transaction || this._store;
+
+        if (node.hasChildren()) {
+            for (let i = 0; i < 16; i++) {
+                const subhash = node.getChild(i.toString(16));
+                if (!subhash) continue;
+                const subnode = await transaction.get(subhash);
+                if (subnode && !this._verify(subnode, transaction)) return false;
+                if (subnode.prefix !== node.prefix + i.toString(16)) return false;
+            }
+        }
+        return true;
+    }
+
     async get(address, transaction) {
         transaction = transaction || this._store;
 
@@ -197,10 +232,22 @@ class AccountsTree extends Observable {
         const rootNode = await transaction.get(rootKey);
 
         const prefix = address.toHex();
-        return this._retrieve(transaction, rootNode, prefix);
+        const slice = await this._retrieveSlice(transaction, rootNode, prefix);
+        return Array.isArray(slice) ? slice[slice.length - 1] : false;
     }
 
-    async _retrieve(transaction, node, prefix) {
+    async getSlice(address, transaction) {
+        transaction = transaction || this._store;
+
+        // Fetch the root node. This should never fail.
+        const rootKey = await transaction.getRootKey();
+        const rootNode = await transaction.get(rootKey);
+
+        const prefix = address.toHex();
+        return this._retrieveSlice(transaction, rootNode, prefix);
+    }
+
+    async _retrieveSlice(transaction, node, prefix) {
         // Find common prefix between node and requested address.
         const commonPrefix = AccountsTree._commonPrefix(node.prefix, prefix);
 
@@ -212,13 +259,20 @@ class AccountsTree extends Observable {
         prefix = prefix.substr(commonPrefix.length);
 
         // If the remaining address is empty, we have found the requested node.
-        if (!prefix.length) return node.account;
+        if (!prefix.length) return [node.account];
 
         // Descend into the matching child node if one exists.
         const childKey = node.getChild(prefix);
         if (childKey) {
             const childNode = await transaction.get(childKey);
-            return this._retrieve(transaction, childNode, prefix);
+            if (childNode) {
+                const slice = await this._retrieveSlice(transaction, childNode, prefix);
+                if (slice) slice.unshift(childNode);
+                return slice;
+            } else {
+                // We do not know the matching child, but it exists!
+                return undefined; // TODO
+            }
         }
 
         // No matching child exists, the requested address is not part of this node.

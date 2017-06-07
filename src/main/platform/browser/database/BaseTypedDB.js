@@ -3,7 +3,7 @@ class BaseTypedDB {
         if (BaseTypedDB._db) return Promise.resolve(BaseTypedDB._db);
 
         const indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.OIndexedDB || window.msIndexedDB;
-        const dbVersion = 4;
+        const dbVersion = 5;
         const request = indexedDB.open('nimiq', dbVersion);
 
         return new Promise((resolve, error) => {
@@ -27,9 +27,15 @@ class BaseTypedDB {
                 } catch (e) {
                     // Thrown if the object store doesn't exist, ignore
                 }
+                try {
+                    db.deleteObjectStore('headers');
+                } catch (e) {
+                    // Thrown if the object store doesn't exist, ignore
+                }
 
                 db.createObjectStore('accounts');
                 db.createObjectStore('blocks');
+                db.createObjectStore('headers');
 
                 try {
                     db.createObjectStore('certificate');
