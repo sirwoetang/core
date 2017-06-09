@@ -422,8 +422,9 @@ class Blockchain extends Observable {
 
     async getUsedAddresses() {
         const addresses = [];
-        for (const blockHash of this._mainPath) {
-            const block = await this._store.get(blockHash.toBase64()); // eslint-disable-line no-await-in-loop
+        for (const blockHash of this._mainPath.array) {
+            const chain = await this._store.get(blockHash.toBase64()); // eslint-disable-line no-await-in-loop
+            const block = chain.head;
             // Push all addresses from this block.
             addresses.push(block.body.minerAddr);
             for (const tx of block.body.transactions) {
@@ -462,13 +463,13 @@ class Blockchain extends Observable {
                 startHash = path[0];
             }
 
-            // Compute the actual time it took to mine the last DIFFICULTY_ADJUSTMENT_BLOCKS blocks.
-            const startChain = await this._store.get(startHash.toBase64());
-
             // TODO XXX This may happen in mini clients, since not all blocks are synced!!! Proper handling required!
-            if (!startChain) {
+            if (!startHash) {
                 return -1;
             }
+
+            // Compute the actual time it took to mine the last DIFFICULTY_ADJUSTMENT_BLOCKS blocks.
+            const startChain = await this._store.get(startHash.toBase64());
 
             const actualTime = chain.head.timestamp - startChain.head.timestamp;
 
