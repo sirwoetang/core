@@ -113,6 +113,6 @@ Message.Type = {
 
     // Nimiq
     GETACCOUNTS: 'getaccounts',
-    ACCOUNTS: 'balances'
+    ACCOUNTS: 'accounts'
 };
 Class.register(Message);
