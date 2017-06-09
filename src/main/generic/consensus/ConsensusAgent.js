@@ -327,6 +327,7 @@ class ConsensusAgent extends Observable {
         this._timers.clearTimeout('getaccounts');
         // If we could not populate our accounts tree, maybe a new block was mined.
         if (!(await this._blockchain.populateAccountsTree(msg.nodes))) {
+            Log.d('Failed to populate accounts tree');
             // TODO What should we do in this case?
             return;
         }
