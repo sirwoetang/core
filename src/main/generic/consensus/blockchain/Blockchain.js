@@ -34,7 +34,7 @@ class Blockchain extends Observable {
         // Load the main chain from storage.
         this._mainChain = await this._store.getMainChain();
 
-        this._proofchain.init();
+        await this._proofchain.init();
 
         // If we don't know any chains, start with the genesis chain.
         if (!this._mainChain) {
