@@ -41,6 +41,7 @@ class Blockchain extends Observable {
             this._mainChain = new Chain(Block.GENESIS);
             await this._store.put(this._mainChain);
             await this._store.setMainChain(this._mainChain);
+            await this._proofchain.push(Block.GENESIS.header, true);
         }
 
         // Cache the hash of the head of the current main chain.
