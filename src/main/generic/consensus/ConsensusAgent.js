@@ -423,7 +423,7 @@ class ConsensusAgent extends Observable {
             status = await this._blockchain.resetTo(msg.block);
         } else {
             // Put block into blockchain.
-            status = await this._blockchain.pushBlock(msg.block);
+            status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full);
         }
 
         // TODO send reject message if we don't like the block

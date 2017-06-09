@@ -12,14 +12,19 @@ class Proofchain extends Observable {
     constructor(store) {
         super();
         this._store = store;
-        this._path = [];
+        this._path = new IndexedArray();
     }
 
     async init() {
         let current = await this._store.getMainHead();
+        const tmpPath = [];
         while (current) {
-            this._path.unshift(await current.hash());
+            tmpPath.unshift(await current.hash());
             current = await this._store.get(current.prevHash.toBase64());
+        }
+        // Push in right order.
+        for (const hash of tmpPath) {
+            this._path.push(hash);
         }
     }
 

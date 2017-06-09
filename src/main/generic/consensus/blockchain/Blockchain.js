@@ -118,10 +118,10 @@ class Blockchain extends Observable {
         return new IndexedArray(path);
     }
 
-    pushBlock(block) {
+    pushBlock(block, updateAccounts = true) {
         return new Promise((resolve, error) => {
             this._synchronizer.push(() => {
-                return this._pushBlock(block);
+                return this._pushBlock(block, updateAccounts);
             }, resolve, error);
         });
     }
@@ -159,7 +159,7 @@ class Blockchain extends Observable {
         return Accounts.createTemporary(this._accounts);
     }
 
-    async _pushBlock(block) {
+    async _pushBlock(block, updateAccounts = true) {
         // Check if we already know this block. If so, ignore it.
         const hash = await block.hash();
         const knownChain = await this._store.get(hash.toBase64());
@@ -199,7 +199,7 @@ class Blockchain extends Observable {
         // Check if the new block extends our current main chain.
         if (block.prevHash.equals(this._headHash)) {
             // Append new block to the main chain.
-            if (!(await this._extend(newChain, hash))) {
+            if (!(await this._extend(newChain, hash, updateAccounts))) {
                 return Blockchain.PUSH_ERR_INVALID_BLOCK;
             }
 
@@ -307,7 +307,7 @@ class Blockchain extends Observable {
 
         // Check that the difficulty matches.
         const nextCompactTarget = await this.getNextCompactTarget(chain);
-        if (nextCompactTarget !== block.nBits) {
+        if (nextCompactTarget > 0 && nextCompactTarget !== block.nBits) {
             Log.w(Blockchain, 'Rejecting block - difficulty mismatch');
             return false;
         }
@@ -322,15 +322,17 @@ class Blockchain extends Observable {
         return true;
     }
 
-    async _extend(newChain, headHash) {
+    async _extend(newChain, headHash, updateAccounts = true) {
         // Validate that the block matches the current account state.
-        try {
-            await this._accounts.commitBlock(newChain.head);
-        } catch (e) {
-            // AccountsHash mismatch. This can happen if someone gives us an
-            // invalid block. TODO error handling
-            Log.w(Blockchain, `Rejecting block, AccountsHash mismatch: bodyHash=${newChain.head.bodyHash}, accountsHash=${newChain.head.accountsHash}`);
-            return false;
+        if (updateAccounts) {
+            try {
+                await this._accounts.commitBlock(newChain.head);
+            } catch (e) {
+                // AccountsHash mismatch. This can happen if someone gives us an
+                // invalid block. TODO error handling
+                Log.w(Blockchain, `Rejecting block, AccountsHash mismatch: bodyHash=${newChain.head.bodyHash}, accountsHash=${newChain.head.accountsHash}`);
+                return false;
+            }
         }
 
         // Update main chain.
@@ -462,6 +464,12 @@ class Blockchain extends Observable {
 
             // Compute the actual time it took to mine the last DIFFICULTY_ADJUSTMENT_BLOCKS blocks.
             const startChain = await this._store.get(startHash.toBase64());
+
+            // TODO XXX This may happen in mini clients, since not all blocks are synced!!! Proper handling required!
+            if (!startChain) {
+                return -1;
+            }
+
             const actualTime = chain.head.timestamp - startChain.head.timestamp;
 
             // Compute the target adjustment factor.
