@@ -294,7 +294,7 @@ class ConsensusAgent extends Observable {
         // Clear the getblocks timeout.
         this._timers.clearTimeout('getblocks');
 
-        Log.v(ConsensusAgent, `[INV] ${msg.vectors.length} vectors (${unknownObjects.length} new) received from ${this._peer.peerAddress}`);
+        Log.v(ConsensusAgent, `[INV] ${msg.vectors.length} vectors received from ${this._peer.peerAddress}`);
 
         this._requestObjects(msg.vectors);
     }
