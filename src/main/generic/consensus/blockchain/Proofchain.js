@@ -99,6 +99,11 @@ class Proofchain extends Observable {
     }
 
     async verifyHeaderIntegrity(header) {
+        if (header === Block.GENESIS.header) {
+            // Shortcut Genesis block
+            return true;
+        }
+
         // Verify that the block's timestamp is not too far in the future.
         // TODO Use network-adjusted time (see https://en.bitcoin.it/wiki/Block_timestamp).
         const maxTimestamp = Math.floor((Date.now() + Blockchain.BLOCK_TIMESTAMP_DRIFT_MAX) / 1000);
