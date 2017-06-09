@@ -64,7 +64,15 @@ class Blockchain extends Observable {
         return this;
     }
 
-    async resetTo(block) {
+    resetTo(block) {
+        return new Promise((resolve, error) => {
+            this._synchronizer.push(() => {
+                return this._resetTo(block);
+            }, resolve, error);
+        });
+    }
+
+    async _resetTo(block) {
         if (!this._verifyBlock(block)) {
             return Blockchain.PUSH_ERR_INVALID_BLOCK;
         }
@@ -78,7 +86,8 @@ class Blockchain extends Observable {
 
         // Fetch the path along the main chain.
         // XXX optimize this!
-        this._mainPath = await this._fetchPath(this.head);
+        // this._mainPath = await this._fetchPath(this.head);
+        this._mainPath = new IndexedArray([await block.hash()]);
         return Blockchain.PUSH_OK;
     }
 

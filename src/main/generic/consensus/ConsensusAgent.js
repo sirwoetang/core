@@ -187,7 +187,7 @@ class ConsensusAgent extends Observable {
             if (hashes.length >= 10) {
                 step *= 2;
             }
-            const hash = this._blockchain.proofchain._path[i];
+            const hash = this._blockchain.proofchain.path[i];
             if (hash) hashes.push(hash);
         }
 
@@ -313,7 +313,7 @@ class ConsensusAgent extends Observable {
             const startIndex = Math.max(0, msg.headers.length - ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
             let objectsToRequest = [];
             for (let i=startIndex; i<msg.headers.length; ++i) {
-                objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, msg.headers[i]));
+                objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, await msg.headers[i].hash()));
             }
             this._requestObjects(objectsToRequest);
         } catch (e) {
