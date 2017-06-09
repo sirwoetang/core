@@ -20,7 +20,7 @@ class GetHeadersMessage extends Message {
         }
         const hashStop = Hash.unserialize(buf);
         const maxNumAndReverse = buf.readUint16();
-        return new GetHeadersMessage(hashes, hashStop, maxNumAndReverse & 0x7fff, maxNumAndReverse & 0x8000 > 0);
+        return new GetHeadersMessage(hashes, hashStop, maxNumAndReverse & 0x7fff, (maxNumAndReverse & 0x8000) > 0);
     }
 
     serialize(buf) {

@@ -77,7 +77,7 @@ class Blockchain extends Observable {
             return Blockchain.PUSH_ERR_INVALID_BLOCK;
         }
 
-        this._mainChain = new Chain(block);
+        this._mainChain = new Chain(block, block.difficulty, block.header.height);
         await this._store.put(this._mainChain);
         await this._store.setMainChain(this._mainChain);
 
