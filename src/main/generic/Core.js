@@ -6,7 +6,7 @@ class Core {
     async _init(behavior) {
         // Model
         this.accounts = await Accounts.getPersistent();
-        this.blockchain = await Blockchain.getPersistent(this.accounts);
+        this.blockchain = await Blockchain.getPersistent(this.accounts, behavior);
         this.mempool = new Mempool(this.blockchain, this.accounts);
 
         // Network

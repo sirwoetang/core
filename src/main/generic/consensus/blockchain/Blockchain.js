@@ -53,7 +53,7 @@ class Blockchain extends Observable {
         if (this._behavior === Core.Behavior.Full) {
             this._mainPath = await this._fetchPath(this.head);
         } else if (this._behavior === Core.Behavior.Mini) {
-            this._mainPath = await this._fetchPath(this.head, ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
+            this._mainPath = await this._fetchPath(this.head, ConsensusAgent.NUM_BLOCKS_VERIFY_MINI - 1);
         }
 
         // Automatically commit the chain head if the accountsHash matches.
