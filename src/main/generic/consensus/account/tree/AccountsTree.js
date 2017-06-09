@@ -233,7 +233,7 @@ class AccountsTree extends Observable {
 
         const prefix = address.toHex();
         const slice = await this._retrieveSlice(transaction, rootNode, prefix);
-        return Array.isArray(slice) ? slice[slice.length - 1] : false;
+        return Array.isArray(slice) ? slice[slice.length - 1].account : false;
     }
 
     async getSlice(address, transaction) {
@@ -261,7 +261,7 @@ class AccountsTree extends Observable {
         prefix = prefix.substr(commonPrefix.length);
 
         // If the remaining address is empty, we have found the requested node.
-        if (!prefix.length) return [node.account];
+        if (!prefix.length) return [];
 
         // Descend into the matching child node if one exists.
         const childKey = node.getChild(prefix);
