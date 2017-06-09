@@ -51,10 +51,10 @@ class Proofchain extends Observable {
             // TODO: Clear old entries from store?
             await this._store.put(header);
             await this._store.setMainHead(header);
-            this._path = [await header.hash()];
+            this._path = new IndexedArray([await header.hash()]);
         } else {
             await this._store.cleanMainHead();
-            this._path = [];
+            this._path = new IndexedArray();
         }
         this.fire('restarted', header);
     }
@@ -91,7 +91,7 @@ class Proofchain extends Observable {
         } else if (allowRestart) {
             await this._store.put(header);
             await this._store.setMainHead(header);
-            this._path = [headerHash];
+            this._path = new IndexedArray([headerHash]);
             this.fire('restarted', header);
         } else {
             throw 'Header does not chain up and allowRestart is not set.';
