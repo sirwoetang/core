@@ -152,6 +152,7 @@ class ConsensusAgent extends Observable {
             this._requestBlocks();
         } else if (this._behavior === Core.Behavior.Mini) {
             // Current behavior: Download 500 latest headers. Verify PoW.
+            // TODO: To make sure we have the proof chain with the best total difficulty, receive proof chain from multiple nodes and rebranch if necessary (not yet implemented though, should probably go into the push function in proof chain).
             this._requestHeaders();
         }
     }
@@ -316,7 +317,7 @@ class ConsensusAgent extends Observable {
             }
             this._requestObjects(objectsToRequest);
         } catch (e) {
-            console.log(e);
+            Log.d(e);
             this._peer.channel.ban('received invalid headers');
             return;
         }
@@ -324,10 +325,33 @@ class ConsensusAgent extends Observable {
 
     async _onAccounts(msg) {
         this._timers.clearTimeout('getaccounts');
-        await this._blockchain.populateAccountsTree(msg.nodes);
+        // If we could not populate our accounts tree, maybe a new block was mined.
+        if (!(await this._blockchain.populateAccountsTree(msg.nodes))) {
+            // TODO What should we do in this case?
+            return;
+        }
 
-        // TODO Verify block history by taking current accounts tree
+        // Verify block history by taking current accounts tree
         // and reverting it back to the first block we retrieved.
+        const tmpAccounts = this._blockchain.createTemporaryAccounts();
+        let head = await this._blockchain.head.hash();
+        let accountsHash = await tmpAccounts.hash();
+        // Iterate over all blocks in reverse.
+        // Do ConsensusAgent.NUM_BLOCKS_VERIFY_MINI+1 runs to verify all ConsensusAgent.NUM_BLOCKS_VERIFY_MINI blocks.
+        for (let i=0; i<=ConsensusAgent.NUM_BLOCKS_VERIFY_MINI; ++i) {
+            const block = await this._blockchain.getBlock(head); // eslint-disable-line no-await-in-loop
+
+            // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
+            if (!accountsHash.equals(block.accountsHash)) {
+                Log.d('Failed to validate received blocks - reverting accounts yielded different hash');
+                this._peer.channel.ban('received invalid accounts or block');
+                return;
+            }
+
+            await tmpAccounts.revertBlock(block); // eslint-disable-line no-await-in-loop
+            accountsHash = await tmpAccounts.hash(); // eslint-disable-line no-await-in-loop
+            head = block.prevHash;
+        }
 
         // Mark as synced!
         // Consensus established.

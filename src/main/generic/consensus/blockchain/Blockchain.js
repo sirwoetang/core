@@ -131,12 +131,16 @@ class Blockchain extends Observable {
     populateAccountsTree(nodes) {
         return new Promise((resolve, error) => {
             this._synchronizer.push(async () => {
-                if ((await nodes[0].hash()).equals(await this._mainChain.hash())) return; // TODO is _mainChain.hash correct?
+                // Check whether the current accountsHash does match the new root node.
+                // TODO: Ask Marvin about his intention regarding this check, since it was different before.
+                if (!(await nodes[0].hash()).equals(await this._mainChain.head.header.accountsHash)) return false;
                 const accounts = this.createTemporaryAccounts();
                 if (await accounts.populate(nodes)) {
                     // TODO: this._accounts.cleanup();
                     await this._accounts.populate(nodes);
+                    return true;
                 }
+                return false;
             }, resolve, error);
         });
     }
