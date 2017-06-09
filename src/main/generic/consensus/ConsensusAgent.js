@@ -652,7 +652,7 @@ class ConsensusAgent extends Observable {
         const multi = await this._blockchain.getAccountSlices(msg.addresses);
         const res = [];
         for (const slice of multi) {
-            for (const node of slice) {
+            for (const node of (await slice)) {
                 // Do not include duplicates.
                 if (res.indexOf(node) < 0) res.push(node);
             }
