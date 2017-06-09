@@ -649,7 +649,7 @@ class ConsensusAgent extends Observable {
 
     async _onGetAccounts(msg) {
         Log.v(ConsensusAgent, `[GETACCOUNTS] ${msg.addresses.length} accounts slices requested from ${this._peer.peerAddress}`);
-        const multi = this._blockchain.getAccountSlices(msg.addresses);
+        const multi = await this._blockchain.getAccountSlices(msg.addresses);
         const res = [];
         for (const slice of multi) {
             for (const node of slice) {
