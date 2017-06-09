@@ -104,6 +104,7 @@ class Consensus extends Observable {
             this._onPeerLeft(bestAgent.peer);
             this._onPeerSynced();
         });
+        // TODO We should check that the peer actually sent us a chain with the promised difficulty.
         bestAgent.syncBlockchain();
     }
 

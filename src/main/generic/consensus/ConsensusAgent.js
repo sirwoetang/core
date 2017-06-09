@@ -146,8 +146,27 @@ class ConsensusAgent extends Observable {
         } else if (this._behavior === Core.Behavior.Mini) {
             // TODO
             // Current behavior: Download 500 latest headers. Verify PoW. [TODO: Download and verify latest 20 full blocks]
+            // How can we make sure that this proof chain has the highest cumulative difficulty?
             this._requestHeaders();
         }
+    }
+
+    _requestAccounts() {
+        // XXX Only one getaccounts request at a time.
+        if (this._timers.timeoutExists('getaccounts')) {
+            Log.e(ConsensusAgent, 'Duplicate _requestAccounts()');
+            return;
+        }
+
+        const head = this._blockchain.head;
+
+        // TODO Which slices to choose?
+        this._peer.channel.getaccounts([]);
+
+        this._timers.setTimeout('getaccounts', () => {
+            this._timers.clearTimeout('getaccounts');
+            this._peer.channel.close('getaccounts timeout');
+        }, ConsensusAgent.REQUEST_TIMEOUT);
     }
 
     async _requestHeaders() {
@@ -159,12 +178,12 @@ class ConsensusAgent extends Observable {
 
         const hashes = [];
         let step = 1;
-        for (let i = await this._blockchain._proofchain.getHeight() - 1; i > 0; i -= step) {
+        for (let i = await this._blockchain.proofchain.getHeight() - 1; i > 0; i -= step) {
             // Push top 10 hashes first, then back off exponentially.
             if (hashes.length >= 10) {
                 step *= 2;
             }
-            const hash = this._blockchain._proofchain._path[i];
+            const hash = this._blockchain.proofchain._path[i];
             if (hash) hashes.push(hash);
         }
 
@@ -214,19 +233,16 @@ class ConsensusAgent extends Observable {
         }, ConsensusAgent.REQUEST_TIMEOUT);
     }
 
-    async _onInv(msg) {
-        // Clear the getblocks timeout.
-        this._timers.clearTimeout('getblocks');
-
+    _requestObjects(vectors) {
         // Keep track of the objects the peer knows.
-        for (const vector of msg.vectors) {
+        for (const vector of vectors) {
             this._knownObjects.add(vector);
         }
 
         // Check which of the advertised objects we know
         // Request unknown objects, ignore known ones.
         const unknownObjects = [];
-        for (const vector of msg.vectors) {
+        for (const vector of vectors) {
             switch (vector.type) {
                 case InvVector.Type.BLOCK: {
                     const block = await this._blockchain.getBlock(vector.hash);
@@ -246,8 +262,6 @@ class ConsensusAgent extends Observable {
                     throw `Invalid inventory type: ${vector.type}`;
             }
         }
-
-        Log.v(ConsensusAgent, `[INV] ${msg.vectors.length} vectors (${unknownObjects.length} new) received from ${this._peer.peerAddress}`);
 
         if (unknownObjects.length > 0) {
             // Store unknown vectors in objectsToRequest array.
@@ -272,6 +286,15 @@ class ConsensusAgent extends Observable {
         }
     }
 
+    async _onInv(msg) {
+        // Clear the getblocks timeout.
+        this._timers.clearTimeout('getblocks');
+
+        Log.v(ConsensusAgent, `[INV] ${msg.vectors.length} vectors (${unknownObjects.length} new) received from ${this._peer.peerAddress}`);
+
+        this._requestObjects(msg.vectors);
+    }
+
     async _onHeaders(msg) {
         this._timers.clearTimeout('getheaders');
         // TODO XXX
@@ -279,8 +302,16 @@ class ConsensusAgent extends Observable {
             const proofchain = await Proofchain.createVolatile();
             await proofchain.pushAll(msg.headers);
 
-            // If it would be bad it had failed here
+            // If it would be bad it had failed here.
             await this._blockchain.proofchain.pushAll(msg.headers);
+
+            // Next, request blocks for the most recent headers.
+            const startIndex = Math.max(0, msg.headers.length - ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
+            let objectsToRequest = [];
+            for (let i=startIndex; i<msg.headers.length; ++i) {
+                objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, msg.headers[i]));
+            }
+            this._requestObjects(objectsToRequest);
         } catch (e) {
             console.log(e);
             this._peer.channel.ban('received invalid headers');
@@ -609,4 +640,6 @@ ConsensusAgent.REQUEST_TIMEOUT = 5000; // ms
 ConsensusAgent.MAX_SYNC_ATTEMPTS = 5;
 // Maximum number of inventory vectors to sent in the response for onGetBlocks.
 ConsensusAgent.GETBLOCKS_VECTORS_MAX = 500;
+// Number of blocks to verify in the mini client.
+ConsensusAgent.NUM_BLOCKS_VERIFY_MINI = 50;
 Class.register(ConsensusAgent);
