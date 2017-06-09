@@ -131,7 +131,7 @@ class Blockchain extends Observable {
             this._synchronizer.push(() => {
                 const res = [];
                 for (const address of addresses) {
-                    res.push(this._accounts.getSlice(address));
+                    res.push(await this._accounts.getSlice(address));
                 }
                 return res;
             }, resolve, error);
