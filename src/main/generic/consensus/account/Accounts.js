@@ -73,6 +73,10 @@ class Accounts extends Observable {
         }
     }
 
+    getSlice(address, transaction) {
+        return this._tree.getSlice(address, transaction);
+    }
+
     async _execute(treeTx, body, operator) {
         await this._executeTransactions(treeTx, body, operator);
         await this._rewardMiner(treeTx, body, operator);
