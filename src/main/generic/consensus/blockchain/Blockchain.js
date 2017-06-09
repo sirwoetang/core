@@ -63,6 +63,24 @@ class Blockchain extends Observable {
         return this;
     }
 
+    async resetTo(block) {
+        if (!this._verifyBlock(block)) {
+            return Blockchain.PUSH_ERR_INVALID_BLOCK;
+        }
+
+        this._mainChain = new Chain(block);
+        await this._store.put(this._mainChain);
+        await this._store.setMainChain(this._mainChain);
+
+        // Cache the hash of the head of the current main chain.
+        this._headHash = await this._mainChain.hash();
+
+        // Fetch the path along the main chain.
+        // XXX optimize this!
+        this._mainPath = await this._fetchPath(this.head);
+        return Blockchain.PUSH_OK;
+    }
+
     // Retrieves up to maxBlocks predecessors of the given block.
     // Returns an array of max (maxBlocks + 1) block hashes with the given hash
     // as the last element.

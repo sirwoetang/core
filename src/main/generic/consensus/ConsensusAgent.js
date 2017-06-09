@@ -15,6 +15,9 @@ class ConsensusAgent extends Observable {
         // The height of our blockchain when we last attempted to sync the chain.
         this._lastChainHeight = 0;
 
+        // Number of blocks received from this peer.
+        this._blocksReceived = 0;
+
         // The number of failed blockchain sync attempts.
         this._failedSyncs = 0;
 
@@ -375,11 +378,20 @@ class ConsensusAgent extends Observable {
             return;
         }
 
+        // Increase number of received blocks.
+        this._blocksReceived++;
+
         // Mark object as received.
         this._onObjectReceived(vector);
 
-        // Put block into blockchain.
-        const status = await this._blockchain.pushBlock(msg.block);
+        let status;
+        // If this is the first block in the mini BC client, restart chain here!
+        if (this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
+            status = this._blockchain.resetTo(msg.block);
+        } else {
+            // Put block into blockchain.
+            status = await this._blockchain.pushBlock(msg.block);
+        }
 
         // TODO send reject message if we don't like the block
         if (status === Blockchain.PUSH_ERR_INVALID_BLOCK) {
