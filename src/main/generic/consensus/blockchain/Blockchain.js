@@ -429,7 +429,7 @@ class Blockchain extends Observable {
     }
 
     async getHeader(hash) {
-        const header = this._proofchain.getHeader(hash);
+        const header = await this._proofchain.getHeader(hash);
         if (header) return header;
         const block = this.getBlock(hash);
         return block ? block.header : null;
