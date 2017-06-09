@@ -133,6 +133,10 @@ class ConsensusAgent extends Observable {
             this._synced = true;
             this.fire('sync');
         }
+        // We have the same chain height as the peer, but we need to sync the accounts next (mini BC client).
+        else if (this._behavior === Core.Behavior.Mini) {
+            this._requestAccounts();
+        }
         // We have the same chain height as the peer.
         // TODO Do we need to check that we have the same head???
         else {
@@ -147,24 +151,20 @@ class ConsensusAgent extends Observable {
         if (this._behavior === Core.Behavior.Full) {
             this._requestBlocks();
         } else if (this._behavior === Core.Behavior.Mini) {
-            // TODO
-            // Current behavior: Download 500 latest headers. Verify PoW. [TODO: Download and verify latest 20 full blocks]
-            // How can we make sure that this proof chain has the highest cumulative difficulty?
+            // Current behavior: Download 500 latest headers. Verify PoW.
             this._requestHeaders();
         }
     }
 
-    _requestAccounts() {
+    async _requestAccounts() {
         // XXX Only one getaccounts request at a time.
         if (this._timers.timeoutExists('getaccounts')) {
             Log.e(ConsensusAgent, 'Duplicate _requestAccounts()');
             return;
         }
 
-        const head = this._blockchain.head;
-
-        // TODO Which slices to choose?
-        this._peer.channel.getaccounts([]);
+        const slices = await this._blockchain.getUsedAddresses();
+        this._peer.channel.getaccounts(slices);
 
         this._timers.setTimeout('getaccounts', () => {
             this._timers.clearTimeout('getaccounts');
@@ -236,7 +236,7 @@ class ConsensusAgent extends Observable {
         }, ConsensusAgent.REQUEST_TIMEOUT);
     }
 
-    _requestObjects(vectors) {
+    async _requestObjects(vectors) {
         // Keep track of the objects the peer knows.
         for (const vector of vectors) {
             this._knownObjects.add(vector);
@@ -248,14 +248,14 @@ class ConsensusAgent extends Observable {
         for (const vector of vectors) {
             switch (vector.type) {
                 case InvVector.Type.BLOCK: {
-                    const block = await this._blockchain.getBlock(vector.hash);
+                    const block = await this._blockchain.getBlock(vector.hash); // eslint-disable-line no-await-in-loop
                     if (!block) {
                         unknownObjects.push(vector);
                     }
                     break;
                 }
                 case InvVector.Type.TRANSACTION: {
-                    const tx = await this._mempool.getTransaction(vector.hash);
+                    const tx = await this._mempool.getTransaction(vector.hash); // eslint-disable-line no-await-in-loop
                     if (!tx) {
                         unknownObjects.push(vector);
                     }
@@ -325,6 +325,15 @@ class ConsensusAgent extends Observable {
     async _onAccounts(msg) {
         this._timers.clearTimeout('getaccounts');
         await this._blockchain.populateAccountsTree(msg.nodes);
+
+        // TODO Verify block history by taking current accounts tree
+        // and reverting it back to the first block we retrieved.
+
+        // Mark as synced!
+        // Consensus established.
+        this._syncing = false;
+        this._synced = true;
+        this.fire('sync');
     }
 
     _requestData() {
@@ -387,7 +396,7 @@ class ConsensusAgent extends Observable {
         let status;
         // If this is the first block in the mini BC client, restart chain here!
         if (this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
-            status = this._blockchain.resetTo(msg.block);
+            status = await this._blockchain.resetTo(msg.block);
         } else {
             // Put block into blockchain.
             status = await this._blockchain.pushBlock(msg.block);

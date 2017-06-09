@@ -131,7 +131,7 @@ class Blockchain extends Observable {
     populateAccountsTree(nodes) {
         return new Promise((resolve, error) => {
             this._synchronizer.push(async () => {
-                if ((await nodes[0].hash()).equals(await this._mainChain.hash())) return;
+                if ((await nodes[0].hash()).equals(await this._mainChain.hash())) return; // TODO is _mainChain.hash correct?
                 const accounts = this.createTemporaryAccounts();
                 if (await accounts.populate(nodes)) {
                     // TODO: this._accounts.cleanup();
@@ -402,6 +402,20 @@ class Blockchain extends Observable {
             const hash = await chain.hash(); // eslint-disable-line no-await-in-loop
             await this._extend(chain, hash); // eslint-disable-line no-await-in-loop
         }
+    }
+
+    async getUsedAddresses() {
+        const addresses = [];
+        for (const blockHash of this._mainPath) {
+            const block = await this._store.get(blockHash.toBase64()); // eslint-disable-line no-await-in-loop
+            // Push all addresses from this block.
+            addresses.push(block.body.minerAddr);
+            for (const tx of block.body.transactions) {
+                addresses.push(tx.recipientAddr);
+                addresses.push(await tx.getSenderAddr()); // eslint-disable-line no-await-in-loop
+            }
+        }
+        return addresses;
     }
 
     async getBlock(hash) {
