@@ -327,7 +327,7 @@ class ConsensusAgent extends Observable {
         this._timers.clearTimeout('getaccounts');
         // If we could not populate our accounts tree, maybe a new block was mined.
         if (!(await this._blockchain.populateAccountsTree(msg.nodes))) {
-            Log.d('Failed to populate accounts tree');
+            Log.d(ConsensusAgent, 'Failed to populate accounts tree');
             // TODO What should we do in this case?
             return;
         }
@@ -344,7 +344,7 @@ class ConsensusAgent extends Observable {
 
             // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
             if (!accountsHash.equals(block.accountsHash)) {
-                Log.d('Failed to validate received blocks - reverting accounts yielded different hash');
+                Log.d(ConsensusAgent, 'Failed to validate received blocks - reverting accounts yielded different hash');
                 this._peer.channel.ban('received invalid accounts or block');
                 return;
             }
@@ -648,11 +648,13 @@ class ConsensusAgent extends Observable {
     }
 
     async _onGetAccounts(msg) {
+        Log.v(ConsensusAgent, `[GETACCOUNTS] ${msg.addresses.length} accounts slices requested from ${this._peer.peerAddress}`);
         const multi = this._blockchain.getAccountSlices(msg.addresses);
         const res = [];
         for (const slice of multi) {
             for (const node of slice) {
-                if (res.indexOf(node) >= 0) res.push(node);
+                // Do not include duplicates.
+                if (res.indexOf(node) < 0) res.push(node);
             }
         }
         this._peer.channel.accounts(res);
