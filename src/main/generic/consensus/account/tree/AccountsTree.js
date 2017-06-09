@@ -244,7 +244,9 @@ class AccountsTree extends Observable {
         const rootNode = await transaction.get(rootKey);
 
         const prefix = address.toHex();
-        return this._retrieveSlice(transaction, rootNode, prefix);
+        const res = await this._retrieveSlice(transaction, rootNode, prefix);
+        if (res.unshift) res.unshift(rootNode);
+        return res;
     }
 
     async _retrieveSlice(transaction, node, prefix) {

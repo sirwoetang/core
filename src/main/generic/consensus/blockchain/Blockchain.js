@@ -1,21 +1,22 @@
 class Blockchain extends Observable {
-    static async getPersistent(accounts) {
+    static async getPersistent(accounts, behavior = Core.Behavior.Full) {
         const store = BlockchainStore.getPersistent();
         const proofchain = Proofchain.getPersistent();
-        return new Blockchain(store, accounts, proofchain);
+        return new Blockchain(store, accounts, proofchain, behavior);
     }
 
-    static async createVolatile(accounts) {
+    static async createVolatile(accounts, behavior = Core.Behavior.Full) {
         const store = BlockchainStore.createVolatile();
         const proofchain = Proofchain.createVolatile();
-        return new Blockchain(store, accounts, proofchain);
+        return new Blockchain(store, accounts, proofchain, behavior);
     }
 
-    constructor(store, accounts, proofchain) {
+    constructor(store, accounts, proofchain, behavior = Core.Behavior.Full) {
         super();
         this._store = store;
         this._accounts = accounts;
         this._proofchain = proofchain;
+        this._behavior = behavior;
 
         this._mainChain = null;
         this._mainPath = null;
@@ -49,7 +50,11 @@ class Blockchain extends Observable {
 
         // Fetch the path along the main chain.
         // XXX optimize this!
-        this._mainPath = await this._fetchPath(this.head);
+        if (this._behavior === Core.Behavior.Full) {
+            this._mainPath = await this._fetchPath(this.head);
+        } else if (this._behavior === Core.Behavior.Mini) {
+            this._mainPath = await this._fetchPath(this.head, ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
+        }
 
         // Automatically commit the chain head if the accountsHash matches.
         // Needed to bootstrap the empty accounts tree.
@@ -128,10 +133,11 @@ class Blockchain extends Observable {
 
     getAccountSlices(addresses) {
         return new Promise((resolve, error) => {
-            this._synchronizer.push(() => {
+            this._synchronizer.push(async () => {
                 const res = [];
                 for (const address of addresses) {
-                    res.push(this._accounts.getSlice(address));
+                    const slice = await this._accounts.getSlice(address);
+                    if (slice) res.push(slice);
                 }
                 return res;
             }, resolve, error);
