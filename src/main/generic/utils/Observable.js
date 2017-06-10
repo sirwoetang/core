@@ -12,6 +12,14 @@ class Observable {
         this._listeners[type].push(callback);
     }
 
+    removeListener(type, callback) {
+        this._listeners[type] = this._listeners[type] || [];
+        const index = this._listeners[type].indexOf(callback);
+        if (index >= 0) {
+            this._listeners[type].splice(index, 1);
+        }
+    }
+
     fire() {
         if (!arguments.length) throw 'Observable.fire() needs type argument';
 

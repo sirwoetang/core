@@ -314,10 +314,7 @@ class ConsensusAgent extends Observable {
             let objectsToRequest = [];
             for (let i=startIndex; i<msg.headers.length; ++i) {
                 const blockHash = await msg.headers[i].hash();
-                // Request those blocks we do not know.
-                if (!(await this._blockchain.getBlock(blockHash))) {
-                    objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, blockHash));
-                }
+                objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, blockHash));
             }
             this._requestObjects(objectsToRequest);
         } catch (e) {
