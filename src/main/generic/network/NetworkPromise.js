@@ -11,11 +11,12 @@ class NetworkPromise {
     _on(resolve, reject, type, checker) {
         const that = this;
         const timeout = setTimeout(() => {
+            that._channel.removeListener(that._listener);
             reject();
         }, 5000);
         this._listener = async msg => {
             if (await checker(msg)) {
-                this._channel.removeListener(that._listener);
+                that._channel.removeListener(that._listener);
                 clearTimeout(timeout);
                 resolve(msg);
             }
