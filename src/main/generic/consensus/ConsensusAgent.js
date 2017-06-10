@@ -313,7 +313,11 @@ class ConsensusAgent extends Observable {
             const startIndex = Math.max(0, msg.headers.length - ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
             let objectsToRequest = [];
             for (let i=startIndex; i<msg.headers.length; ++i) {
-                objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, await msg.headers[i].hash()));
+                const blockHash = await msg.headers[i].hash();
+                // Request those blocks we do not know.
+                if (!(await this._blockchain.getBlock(blockHash))) {
+                    objectsToRequest.push(new InvVector(InvVector.Type.BLOCK, blockHash));
+                }
             }
             this._requestObjects(objectsToRequest);
         } catch (e) {

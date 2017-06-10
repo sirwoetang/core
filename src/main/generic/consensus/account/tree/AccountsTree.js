@@ -192,13 +192,14 @@ class AccountsTree extends Observable {
     async populate(nodes, transaction) {
         transaction = transaction || this._store;
 
-        const rootNode = nodes.shift();
-        const rootKey = await transaction.put(rootNode);
-        await transaction.setRootKey(rootKey);
+        const rootNode = nodes[0];
+        const rootKey = (await rootNode.hash()).toBase64();
 
         for (const node of nodes) {
             await transaction.put(node);
         }
+
+        await transaction.setRootKey(rootKey);
     }
 
     async verify(transaction) {
