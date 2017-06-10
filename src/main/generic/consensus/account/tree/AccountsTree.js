@@ -9,15 +9,17 @@ class AccountsTree extends Observable {
         return new AccountsTree(store);
     }
 
-    static createTemporary(backend) {
+    static createTemporary(backend, fetchChannel) {
         const store = AccountsTreeStore.createTemporary(backend._store);
-        return new AccountsTree(store);
+        return new AccountsTree(store, fetchChannel);
     }
 
-    constructor(treeStore) {
+    constructor(treeStore, fetchChannel) {
         super();
         this._store = treeStore;
         this._synchronizer = new Synchronizer();
+        this._fetchChannel = fetchChannel;
+        this._fetchedSlices = [];
 
         // Initialize root node.
         return this._initRoot();
@@ -266,12 +268,12 @@ class AccountsTree extends Observable {
         const rootNode = await transaction.get(rootKey);
 
         const prefix = address.toHex();
-        const res = await this._retrieveSlice(transaction, rootNode, prefix);
+        const res = await this._retrieveSlice(transaction, rootNode, prefix, address);
         if (res.unshift) res.unshift(rootNode);
         return res;
     }
 
-    async _retrieveSlice(transaction, node, prefix) {
+    async _retrieveSlice(transaction, node, prefix, address) {
         // Find common prefix between node and requested address.
         const commonPrefix = AccountsTree._commonPrefix(node.prefix, prefix);
 
@@ -290,11 +292,18 @@ class AccountsTree extends Observable {
         if (childKey) {
             const childNode = await transaction.get(childKey);
             if (childNode) {
-                const slice = await this._retrieveSlice(transaction, childNode, prefix);
+                const slice = await this._retrieveSlice(transaction, childNode, prefix, address);
                 if (slice) slice.unshift(childNode);
                 return slice;
             } else {
                 // We do not know the matching child, but it exists!
+                if (this._fetchChannel && address) {
+                    const slice = await this._fetchChannel.promise.getaccount(address);
+                    if (Array.isArray(slice) && slice[0] && (await slice[0].hash()).equals(await this.root())) {
+                        this._fetchedSlices.push(slice);
+                        return slice;
+                    }
+                }
                 return undefined; // TODO
             }
         }
@@ -333,6 +342,10 @@ class AccountsTree extends Observable {
             if (prefix1[i] !== prefix2[i]) break;
         }
         return prefix1.substr(0, i);
+    }
+
+    get fetchedSlices() {
+        return this._fetchedSlices;
     }
 
     async root() {

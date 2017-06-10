@@ -109,12 +109,17 @@ class TemporaryAccountsTreeStore {
     }
 
     async put(node) {
+        if (!node) {
+            Log.w(TemporaryAccountsTreeStore, 'Can\'t store null or undefined object.');
+            return node;
+        }
         const key = await this.key(node);
         this._store[key] = node;
         return key;
     }
 
     async remove(node) {
+        if (!node) return node;
         const key = await this.key(node);
         this._removed[key] = node;
         this._store[key] = null;

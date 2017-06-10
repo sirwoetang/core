@@ -79,6 +79,7 @@ require('../../generic/network/message/MessageFactory.js');
 require('./network/webrtc/WebRtcConnector.js');
 require('./network/websocket/WebSocketConnector.js');
 require('./network/NetworkConfig.js');
+require('../../generic/network/NetworkPromise.js');
 require('../../generic/network/PeerConnection.js');
 require('../../generic/network/PeerChannel.js');
 require('../../generic/network/Peer.js');

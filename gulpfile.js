@@ -112,6 +112,7 @@ const sources = {
         './src/main/generic/network/NetworkAgent.js',
         './src/main/generic/network/Network.js',
         './src/main/generic/network/NetUtils.js',
+        './src/main/generic/network/NetworkPromise.js',
         './src/main/generic/network/PeerChannel.js',
         './src/main/generic/network/PeerConnection.js',
         './src/main/generic/network/Peer.js',

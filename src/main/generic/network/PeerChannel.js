@@ -3,6 +3,7 @@ class PeerChannel extends Observable {
         super();
         this._conn = connection;
         this._conn.on('message', msg => this._onMessage(msg));
+        this._promise = new NetworkPromise(this);
 
         // Forward specified events on the connection to listeners of this Observable.
         this.bubble(this._conn, 'close', 'error', 'ban');
@@ -141,6 +142,10 @@ class PeerChannel extends Observable {
 
     get id() {
         return this._conn.id;
+    }
+
+    get promise() {
+        return this._promise;
     }
 
     get protocol() {
