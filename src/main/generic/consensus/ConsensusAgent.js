@@ -424,11 +424,11 @@ class ConsensusAgent extends Observable {
 
         let status;
         // If this is the first block in the mini BC client, restart chain here!
-        if (this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
+        if (this._syncing && this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
             status = await this._blockchain.resetTo(msg.block);
         } else {
             // Put block into blockchain.
-            status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full);
+            status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full || !this._syncing);
         }
 
         // TODO send reject message if we don't like the block
