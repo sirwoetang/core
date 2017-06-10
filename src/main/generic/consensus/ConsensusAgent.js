@@ -343,7 +343,7 @@ class ConsensusAgent extends Observable {
         let accountsHash = await tmpAccounts.hash();
         // Iterate over all blocks in reverse.
         // Do ConsensusAgent.NUM_BLOCKS_VERIFY_MINI+1 runs to verify all ConsensusAgent.NUM_BLOCKS_VERIFY_MINI blocks.
-        for (let i=0; i<=ConsensusAgent.NUM_BLOCKS_VERIFY_MINI; ++i) {
+        for (let i=0; i<ConsensusAgent.NUM_BLOCKS_VERIFY_MINI; ++i) {
             const block = await this._blockchain.getBlock(head); // eslint-disable-line no-await-in-loop
 
             // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
