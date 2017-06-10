@@ -111,6 +111,13 @@ class AccountsTreeNode {
         return this._children.find(child => !!child);
     }
 
+    get children() {
+        if (!this._children) {
+            return undefined;
+        }
+        return this._children.filter(child => !!child);
+    }
+
     get account() {
         return this._account;
     }

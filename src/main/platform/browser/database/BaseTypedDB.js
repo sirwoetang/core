@@ -77,6 +77,16 @@ class BaseTypedDB {
         }));
     }
 
+    clear() {
+        return BaseTypedDB.db.then(db => new Promise((resolve, error) => {
+            const putTx = db.transaction([this._tableName], 'readwrite')
+                .objectStore(this._tableName)
+                .clear();
+            putTx.onsuccess = event => resolve(event.target.result);
+            putTx.onerror = error;
+        }));
+    }
+
     getObject(key) {
         return this._get(key).then(value => value && this._type ? this._type.unserialize(new SerialBuffer(value)) : value);
     }

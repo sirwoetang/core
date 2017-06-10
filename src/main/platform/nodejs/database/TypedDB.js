@@ -48,6 +48,10 @@ class TypedDB {
         });
     }
 
+    clear() {
+        // TODO seems not to be supported by LevelDB
+    }
+
     remove(key) {
         return new Promise((resolve, error) => {
             this._db.del(key, err => resolve());

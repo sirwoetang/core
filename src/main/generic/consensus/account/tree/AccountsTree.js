@@ -33,6 +33,24 @@ class AccountsTree extends Observable {
         return this;
     }
 
+    async clear(transaction) {
+        transaction = transaction || this._store;
+        const rootKey = await transaction.getRootKey();
+        if (rootKey) {
+            await this._clear(rootKey, transaction);
+        }
+    }
+
+    async _clear(nodeKey, transaction) {
+        const node = await transaction.get(nodeKey);
+        await transaction.remove(node);
+        if (node.hasChildren()) {
+            for (const child of node.children) {
+                await this._clear(child, transaction); // await since we want to be sure the cleanup runs through
+            }
+        }
+    }
+
     put(address, account, transaction) {
         return new Promise((resolve, error) => {
             this._synchronizer.push(() => {

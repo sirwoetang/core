@@ -33,6 +33,11 @@ class TypedDB extends BaseTypedDB {
         return super.remove(key);
     }
 
+    clear() {
+        this._cache = {};
+        return super.clear();
+    }
+
     updateCache(values) {
         for (let key in values) {
             this._cache[key] = values[key];

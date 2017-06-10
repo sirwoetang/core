@@ -358,6 +358,12 @@ class ConsensusAgent extends Observable {
             head = block.prevHash;
         }
 
+        if (!(await this._blockchain.proofchain.getHeader(head))) {
+            Log.d(ConsensusAgent, 'Failed to validate received blocks - last predecessor block not on proofchain');
+            this._peer.channel.ban('received invalid accounts or block');
+            return;
+        }
+
         // Mark as synced!
         // Consensus established.
         this._syncing = false;
