@@ -75,6 +75,24 @@ class VolatileAccountsTreeStore {
     setRootKey(rootKey) {
         this._rootKey = rootKey;
     }
+
+    async copy(store) {
+        const rootKey = await store.getRootKey();
+        this.setRootKey(rootKey);
+        if (rootKey) {
+            await this._copy(rootKey, store);
+        }
+    }
+
+    async _copy(nodeKey, store) {
+        const node = await store.get(nodeKey);
+        this.put(node);
+        if (node.hasChildren()) {
+            for (const child of node.children) {
+                await this._copy(child, store); // Await since we want to be sure the cleanup runs through.
+            }
+        }
+    }
 }
 
 class TemporaryAccountsTreeStore {

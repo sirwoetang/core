@@ -23,6 +23,10 @@ class Policy {
         return 10; // Blocks
     }
 
+    static get CHECKPOINT_BLOCKS() {
+        return 10; // Blocks
+    }
+
     static coinsToSatoshis(coins) {
         return Math.round(coins * Policy.SATOSHIS_PER_COIN);
     }

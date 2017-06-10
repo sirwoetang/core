@@ -43,6 +43,8 @@ class Blockchain extends Observable {
             await this._store.put(this._mainChain);
             await this._store.setMainChain(this._mainChain);
             await this._proofchain.push(Block.GENESIS.header, true);
+        } else {
+            await this.loadCheckpoints();
         }
 
         // Cache the hash of the head of the current main chain.
@@ -67,6 +69,22 @@ class Blockchain extends Observable {
         }
 
         return this;
+    }
+
+    async loadCheckpoints() {
+        let numCheckpoints = 0;
+        let block = this._mainChain.head;
+        const tmpAccounts = Accounts.createTemporary(this._accounts);
+        while (numCheckpoints < Accounts.CHECKPOINTS_MAX && block) {
+            // Check if current block is a checkpoint and save state.
+            if (block.header.height % Policy.CHECKPOINT_BLOCKS === 0) {
+                await this._accounts.saveCheckpoint(block.header.height, tmpAccounts);
+                numCheckpoints++;
+            }
+            // Revert the block and move one backwards.
+            await tmpAccounts.revertBlock(block);
+            block = await this.getBlock(block.prevHash);
+        }
     }
 
     resetTo(block) {

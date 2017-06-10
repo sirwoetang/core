@@ -18,6 +18,7 @@ class Accounts extends Observable {
         super();
         this._tree = accountsTree;
         this._behavior = behavior;
+        this._checkpoints = {};
 
         // Forward balance change events to listeners registered on this Observable.
         this.bubble(this._tree, '*');
@@ -31,7 +32,25 @@ class Accounts extends Observable {
 
         const hash = await treeTx.root();
         if (!block.accountsHash.equals(hash)) throw 'AccountsHash mismatch';
+
+        if (block.header.height % Policy.CHECKPOINT_BLOCKS === 0) {
+            this.saveCheckpoint(block.header.height);
+        }
+
         return treeTx.commit();
+    }
+
+    async saveCheckpoint(height, accounts) {
+        accounts = accounts || this;
+        if (Object.keys(this._checkpoints).length >= Accounts.CHECKPOINTS_MAX) {
+            // If there are too many checkpoints stored, remove the one with minimal height.
+            const keys = Object.keys(this._checkpoints);
+            const minKey = Math.min.apply(null, keys);
+            delete this._checkpoints[minKey];
+        }
+        const checkpoint = Accounts.createVolatile();
+        await checkpoint._tree._store.copy(accounts._tree._store); // TODO make this nicer
+        this._checkpoints[height] = checkpoint;
     }
 
     async commitBlockBody(body) {
@@ -132,4 +151,5 @@ class Accounts extends Observable {
     }
 }
 Accounts.EMPTY_TREE_HASH = Hash.fromBase64('cJ6AyISHokEeHuTfufIqhhSS0gxHZRUMDHlKvXD4FHw=');
+Accounts.CHECKPOINTS_MAX = 3;
 Class.register(Accounts);
