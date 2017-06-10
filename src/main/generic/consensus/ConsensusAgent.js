@@ -334,7 +334,7 @@ class ConsensusAgent extends Observable {
 
         // Verify block history by taking current accounts tree
         // and reverting it back to the first block we retrieved.
-        const tmpAccounts = this._blockchain.createTemporaryAccounts();
+        const tmpAccounts = await this._blockchain.createTemporaryAccounts();
         let head = await this._blockchain.head.hash();
         let accountsHash = await tmpAccounts.hash();
         // Iterate over all blocks in reverse.

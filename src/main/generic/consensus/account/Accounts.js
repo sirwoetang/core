@@ -62,10 +62,11 @@ class Accounts extends Observable {
 
     async populate(nodes) {
         if (this._behavior === Core.Behavior.Full) throw 'AccountsTree population is not required in Full mode.';
-        const treeTx = await this._tree.transaction();
+        // Using .transaction(); here is the wrong way, since it does not offer the put/get methods we expect.
+        // Moreover, since we first call populate on a Temporary Accounts object, we do not need to fear anything.
+        const treeTx = this._tree._store;
         await this._tree.populate(nodes, treeTx);
         if (await this._tree.verify(treeTx)) {
-            await treeTx.commit();
             this.fire('populated');
             return true;
         } else {

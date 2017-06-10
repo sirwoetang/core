@@ -192,10 +192,13 @@ class AccountsTree extends Observable {
     async populate(nodes, transaction) {
         transaction = transaction || this._store;
 
+        const rootNode = nodes.shift();
+        const rootKey = await transaction.put(rootNode);
+        await transaction.setRootKey(rootKey);
+
         for (const node of nodes) {
             await transaction.put(node);
         }
-        transaction.setRootKey(await nodes[0].hash());
     }
 
     async verify(transaction) {
@@ -218,7 +221,7 @@ class AccountsTree extends Observable {
                 if (!subhash) continue;
                 const subnode = await transaction.get(subhash);
                 if (subnode && !this._verify(subnode, transaction)) return false;
-                if (subnode.prefix !== node.prefix + i.toString(16)) return false;
+                if (subnode && subnode.prefix !== node.prefix + i.toString(16)) return false;
             }
         }
         return true;

@@ -150,7 +150,7 @@ class Blockchain extends Observable {
                 // Check whether the current accountsHash does match the new root node.
                 // TODO: Ask Marvin about his intention regarding this check, since it was different before.
                 if (!(await nodes[0].hash()).equals(await this._mainChain.head.header.accountsHash)) return false;
-                const accounts = this.createTemporaryAccounts();
+                const accounts = await this.createTemporaryAccounts();
                 if (await accounts.populate(nodes)) {
                     // TODO: this._accounts.cleanup();
                     await this._accounts.populate(nodes);
