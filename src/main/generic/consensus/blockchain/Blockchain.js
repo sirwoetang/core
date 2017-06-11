@@ -22,6 +22,8 @@ class Blockchain extends Observable {
         this._mainPath = null;
         this._headHash = null;
 
+        this._checkpoints = {};
+
         // Blocks arriving fast over the network will create a backlog of blocks
         // in the synchronizer queue. Tell listeners when the blockchain is
         // ready to accept blocks again.
@@ -43,6 +45,7 @@ class Blockchain extends Observable {
             await this._store.put(this._mainChain);
             await this._store.setMainChain(this._mainChain);
             await this._proofchain.push(Block.GENESIS.header, true);
+            await this.saveCheckpoint(0);
         } else {
             await this.loadCheckpoints();
         }
@@ -78,7 +81,7 @@ class Blockchain extends Observable {
         while (numCheckpoints < Accounts.CHECKPOINTS_MAX && block) {
             // Check if current block is a checkpoint and save state.
             if (block.header.height % Policy.CHECKPOINT_BLOCKS === 0) {
-                await this._accounts.saveCheckpoint(block.header.height, tmpAccounts);
+                await this.saveCheckpoint(block.header.height, tmpAccounts);
                 numCheckpoints++;
             }
             // Revert the block and move one backwards.
@@ -149,12 +152,27 @@ class Blockchain extends Observable {
         });
     }
 
-    getAccountSlices(addresses) {
+    async saveCheckpoint(height, accounts) {
+        accounts = accounts || this._accounts;
+        if (Object.keys(this._checkpoints).length >= Blockchain.CHECKPOINTS_MAX) {
+            // If there are too many checkpoints stored, remove the one with minimal height.
+            const keys = Object.keys(this._checkpoints);
+            const minKey = Math.min.apply(null, keys);
+            delete this._checkpoints[minKey];
+        }
+        const checkpoint = Accounts.createVolatile();
+        await checkpoint._tree._store.copy(accounts._tree._store); // TODO make this nicer
+        this._checkpoints[height] = checkpoint;
+    }
+
+    getAccountSlices(addresses, checkpoint) {
+        const accounts = !!this._checkpoints[checkpoint] ? this._checkpoints[checkpoint] : this._accounts;
+        const height = !!this._checkpoints[checkpoint] ? checkpoint : this._mainChain.height;
         return new Promise((resolve, error) => {
             this._synchronizer.push(async () => {
-                const res = [];
+                const res = [height];
                 for (const address of addresses) {
-                    const slice = await this._accounts.getSlice(address);
+                    const slice = await accounts.getSlice(address);
                     if (slice) res.push(slice);
                 }
                 return res;
@@ -356,6 +374,10 @@ class Blockchain extends Observable {
                 // invalid block. TODO error handling
                 Log.w(Blockchain, `Rejecting block, AccountsHash mismatch: bodyHash=${newChain.head.bodyHash}, accountsHash=${newChain.head.accountsHash}`);
                 return false;
+            }
+
+            if (newChain.head.header.height % Policy.CHECKPOINT_BLOCKS === 0) {
+                this.saveCheckpoint(newChain.head.header.height);
             }
         }
 
@@ -559,6 +581,7 @@ Blockchain.PUSH_OK = 0;
 Blockchain.PUSH_ERR_KNOWN_BLOCK = 1;
 Blockchain.PUSH_ERR_INVALID_BLOCK = -1;
 Blockchain.PUSH_ERR_ORPHAN_BLOCK = -2;
+Blockchain.CHECKPOINTS_MAX = 3;
 Class.register(Blockchain);
 
 class Chain {

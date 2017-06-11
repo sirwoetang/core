@@ -24,7 +24,7 @@ class Policy {
     }
 
     static get CHECKPOINT_BLOCKS() {
-        return 10; // Blocks
+        return 40; // Blocks
     }
 
     static coinsToSatoshis(coins) {

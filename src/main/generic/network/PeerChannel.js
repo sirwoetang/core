@@ -115,12 +115,12 @@ class PeerChannel extends Observable {
         return this._send(new SignalMessage(senderId, recipientId, nonce, ttl, flags, payload));
     }
 
-    getaccounts(addresses) {
-        return this._send(new GetAccountsMessage(addresses));
+    getaccounts(addresses, height=0) {
+        return this._send(new GetAccountsMessage(addresses, height));
     }
 
-    accounts(nodes) {
-        return this._send(new AccountsMessage(nodes));
+    accounts(nodes, height=0) {
+        return this._send(new AccountsMessage(nodes, height));
     }
 
     equals(o) {

@@ -164,8 +164,10 @@ class ConsensusAgent extends Observable {
             return;
         }
 
+        // Try fetching slices
+        const secondLastCheckpoint = Math.floor(this._peer.startHeight / Policy.CHECKPOINT_BLOCKS) * Policy.CHECKPOINT_BLOCKS - Policy.CHECKPOINT_BLOCKS;
         const slices = await this._blockchain.getUsedAddresses();
-        this._peer.channel.getaccounts(slices);
+        this._peer.channel.getaccounts(slices, secondLastCheckpoint);
 
         this._timers.setTimeout('getaccounts', () => {
             this._timers.clearTimeout('getaccounts');
@@ -310,7 +312,9 @@ class ConsensusAgent extends Observable {
             await this._blockchain.proofchain.pushAll(msg.headers);
 
             // Next, request blocks for the most recent headers.
-            const startIndex = Math.max(0, msg.headers.length - ConsensusAgent.NUM_BLOCKS_VERIFY_MINI);
+            // We need to go back to the second last checkpoint.
+            const secondLastCheckpoint = (msg.header[msg.headers.length - 1].height % Policy.CHECKPOINT_BLOCKS) + Policy.CHECKPOINT_BLOCKS;
+            const startIndex = Math.max(0, msg.headers.length - secondLastCheckpoint);
             let objectsToRequest = [];
             for (let i=startIndex; i<msg.headers.length; ++i) {
                 const blockHash = await msg.headers[i].hash();
@@ -326,40 +330,45 @@ class ConsensusAgent extends Observable {
 
     async _onAccounts(msg) {
         this._timers.clearTimeout('getaccounts');
+        // Verify block history by taking checkpoint accounts tree
+        // and applying blocks fast forward.
+        const tmpAccounts = await this._blockchain.createTemporaryAccounts();
+        const path = this._blockchain.path;
+        const firstBlock = this._blockchain.getBlock(path[0]);
+
+        // Check that the first block is indeed on the proofchain.
+        if (!(await this._blockchain.proofchain.getHeader(firstBlock.prevHash))) {
+            Log.d(ConsensusAgent, 'Failed to validate received blocks - predecessor block not on proofchain');
+            this._peer.channel.ban('received invalid accounts or block');
+            return;
+        }
+
         // If we could not populate our accounts tree, maybe a new block was mined.
-        if (!(await this._blockchain.populateAccountsTree(msg.nodes))) {
+        if (!(await tmpAccounts.populate(msg.nodes))) {
             Log.d(ConsensusAgent, 'Failed to populate accounts tree');
             // TODO What should we do in this case?
             return;
         }
 
-        // Verify block history by taking current accounts tree
-        // and reverting it back to the first block we retrieved.
-        const tmpAccounts = await this._blockchain.createTemporaryAccounts();
-        let head = await this._blockchain.head.hash();
-        let accountsHash = await tmpAccounts.hash();
-        // Iterate over all blocks in reverse.
-        // Do ConsensusAgent.NUM_BLOCKS_VERIFY_MINI+1 runs to verify all ConsensusAgent.NUM_BLOCKS_VERIFY_MINI blocks.
-        for (let i=0; i<ConsensusAgent.NUM_BLOCKS_VERIFY_MINI; ++i) {
-            const block = await this._blockchain.getBlock(head); // eslint-disable-line no-await-in-loop
+        let accountsHash = null;
+        // Iterate over all blocks.
+        for (let i=0; i<path.length; ++i) {
+            const block = await this._blockchain.getBlock(path[i]); // eslint-disable-line no-await-in-loop
+
+            await tmpAccounts.commitBlock(block); // eslint-disable-line no-await-in-loop
+            accountsHash = await tmpAccounts.hash(); // eslint-disable-line no-await-in-loop
 
             // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
             if (!accountsHash.equals(block.accountsHash)) {
-                Log.d(ConsensusAgent, 'Failed to validate received blocks - reverting accounts yielded different hash');
+                Log.d(ConsensusAgent, 'Failed to validate received blocks - applying block yielded different hash');
                 this._peer.channel.ban('received invalid accounts or block');
                 return;
             }
-
-            await tmpAccounts.revertBlock(block); // eslint-disable-line no-await-in-loop
-            accountsHash = await tmpAccounts.hash(); // eslint-disable-line no-await-in-loop
-            head = block.prevHash;
         }
 
-        if (!(await this._blockchain.proofchain.getHeader(head))) {
-            Log.d(ConsensusAgent, 'Failed to validate received blocks - last predecessor block not on proofchain');
-            this._peer.channel.ban('received invalid accounts or block');
-            return;
-        }
+        // TODO refactor access to commit
+        // If everything worked out, save accountstree by committing it.
+        await tmpAccounts._tree._store.commit();
 
         // Mark as synced!
         // Consensus established.
@@ -656,15 +665,16 @@ class ConsensusAgent extends Observable {
 
     async _onGetAccounts(msg) {
         Log.v(ConsensusAgent, `[GETACCOUNTS] ${msg.addresses.length} accounts slices requested from ${this._peer.peerAddress}`);
-        const multi = await this._blockchain.getAccountSlices(msg.addresses);
+        const multi = await this._blockchain.getAccountSlices(msg.addresses, msg.height);
+        const height = multi.shift();
         const res = [];
         for (const slice of multi) {
-            for (const node of (await slice)) {
+            for (const node of slice) {
                 // Do not include duplicates.
                 if (res.indexOf(node) < 0) res.push(node);
             }
         }
-        this._peer.channel.accounts(res);
+        this._peer.channel.accounts(res, height);
     }
 
     _onClose() {
@@ -695,6 +705,4 @@ ConsensusAgent.REQUEST_TIMEOUT = 5000; // ms
 ConsensusAgent.MAX_SYNC_ATTEMPTS = 5;
 // Maximum number of inventory vectors to sent in the response for onGetBlocks.
 ConsensusAgent.GETBLOCKS_VECTORS_MAX = 500;
-// Number of blocks to verify in the mini client.
-ConsensusAgent.NUM_BLOCKS_VERIFY_MINI = 50;
 Class.register(ConsensusAgent);
