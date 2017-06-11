@@ -11,6 +11,13 @@ class Blockchain extends Observable {
         return new Blockchain(store, accounts, proofchain, behavior);
     }
 
+    static async createTemporary(blockchain, behavior = Core.Behavior.Full) {
+        const store = BlockchainStore.createTemporary(blockchain._store);
+        const proofchain = Proofchain.createVolatile();
+        const accounts = await Accounts.createTemporary(blockchain._accounts);
+        return new Blockchain(store, accounts, proofchain, behavior);
+    }
+
     constructor(store, accounts, proofchain, behavior = Core.Behavior.Full) {
         super();
         this._store = store;
@@ -77,8 +84,8 @@ class Blockchain extends Observable {
     async loadCheckpoints() {
         let numCheckpoints = 0;
         let block = this._mainChain.head;
-        const tmpAccounts = Accounts.createTemporary(this._accounts);
-        while (numCheckpoints < Accounts.CHECKPOINTS_MAX && block) {
+        const tmpAccounts = await Accounts.createTemporary(this._accounts);
+        while (numCheckpoints < Blockchain.CHECKPOINTS_MAX && block) {
             // Check if current block is a checkpoint and save state.
             if (block.header.height % Policy.CHECKPOINT_BLOCKS === 0) {
                 await this.saveCheckpoint(block.header.height, tmpAccounts);
@@ -166,8 +173,8 @@ class Blockchain extends Observable {
     }
 
     getAccountSlices(addresses, checkpoint) {
-        const accounts = !!this._checkpoints[checkpoint] ? this._checkpoints[checkpoint] : this._accounts;
-        const height = !!this._checkpoints[checkpoint] ? checkpoint : this._mainChain.height;
+        const accounts = this._checkpoints[checkpoint] ? this._checkpoints[checkpoint] : this._accounts;
+        const height = this._checkpoints[checkpoint] ? checkpoint : this._mainChain.height;
         return new Promise((resolve, error) => {
             this._synchronizer.push(async () => {
                 const res = [height];

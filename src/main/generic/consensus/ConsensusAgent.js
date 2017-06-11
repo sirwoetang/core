@@ -305,6 +305,11 @@ class ConsensusAgent extends Observable {
         this._timers.clearTimeout('getheaders');
         // TODO XXX
         try {
+            // Shortcut on empty headers.
+            if (msg.headers.length === 0) {
+                return;
+            }
+
             const proofchain = await Proofchain.createVolatile();
             await proofchain.pushAll(msg.headers);
 
@@ -452,6 +457,7 @@ class ConsensusAgent extends Observable {
         // Mark object as received.
         this._onObjectReceived(vector);
 
+        // TODO XXX put into a temporary blockchain while syncing, commit after verifying accounts
         let status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full || !this._syncing);
         // Allow to restart the blockchain if something went wrong and we're syncing with a miniBC client on the first block.
         if (status !== Blockchain.PUSH_OK && this._syncing && this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
