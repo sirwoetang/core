@@ -313,7 +313,7 @@ class ConsensusAgent extends Observable {
 
             // Next, request blocks for the most recent headers.
             // We need to go back to the second last checkpoint.
-            const secondLastCheckpoint = (msg.header[msg.headers.length - 1].height % Policy.CHECKPOINT_BLOCKS) + Policy.CHECKPOINT_BLOCKS;
+            const secondLastCheckpoint = (msg.headers[msg.headers.length - 1].height % Policy.CHECKPOINT_BLOCKS) + Policy.CHECKPOINT_BLOCKS;
             const startIndex = Math.max(0, msg.headers.length - secondLastCheckpoint);
             let objectsToRequest = [];
             for (let i=startIndex; i<msg.headers.length; ++i) {
@@ -334,7 +334,20 @@ class ConsensusAgent extends Observable {
         // and applying blocks fast forward.
         const tmpAccounts = await this._blockchain.createTemporaryAccounts();
         const path = this._blockchain.path;
-        const firstBlock = this._blockchain.getBlock(path[0]);
+        let firstBlock = await this._blockchain.getBlock(path[0]);
+
+        if (msg.height !== firstBlock.header.height) {
+            // Maybe we already knew some parts of the chain, try finding checkpoint in there.
+            const checkpoint = Math.max(0, msg.height - firstBlock.header.height);
+            firstBlock = await this._blockchain.getBlock(path[checkpoint]);
+
+            // If this still is wrong, fail!
+            if (msg.height !== firstBlock.header.height) {
+                Log.d(ConsensusAgent, 'Got accounts slices of wrong block, something went wrong.');
+                // TODO what should we do here?
+                return;
+            }
+        }
 
         // Check that the first block is indeed on the proofchain.
         if (!(await this._blockchain.proofchain.getHeader(firstBlock.prevHash))) {
@@ -350,16 +363,21 @@ class ConsensusAgent extends Observable {
             return;
         }
 
-        let accountsHash = null;
+        const accountsHash = await tmpAccounts.hash();
+        if (!accountsHash.equals(firstBlock.accountsHash)) {
+            Log.d(ConsensusAgent, 'Failed to validate received blocks - applying block yielded different hash');
+            this._peer.channel.ban('received invalid accounts or block');
+            return;
+        }
+
         // Iterate over all blocks.
-        for (let i=0; i<path.length; ++i) {
+        for (let i=1; i<path.length; ++i) {
             const block = await this._blockchain.getBlock(path[i]); // eslint-disable-line no-await-in-loop
 
-            await tmpAccounts.commitBlock(block); // eslint-disable-line no-await-in-loop
-            accountsHash = await tmpAccounts.hash(); // eslint-disable-line no-await-in-loop
-
-            // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
-            if (!accountsHash.equals(block.accountsHash)) {
+            try {
+                await tmpAccounts.commitBlock(block); // eslint-disable-line no-await-in-loop
+            } catch(e) {
+                // Check that the accountsHashes are correct. Remember that the block contains the accounts hash before reverting it.
                 Log.d(ConsensusAgent, 'Failed to validate received blocks - applying block yielded different hash');
                 this._peer.channel.ban('received invalid accounts or block');
                 return;
@@ -434,13 +452,10 @@ class ConsensusAgent extends Observable {
         // Mark object as received.
         this._onObjectReceived(vector);
 
-        let status;
-        // If this is the first block in the mini BC client, restart chain here!
-        if (this._syncing && this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
+        let status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full || !this._syncing);
+        // Allow to restart the blockchain if something went wrong and we're syncing with a miniBC client on the first block.
+        if (status !== Blockchain.PUSH_OK && this._syncing && this._behavior === Core.Behavior.Mini && this._blocksReceived === 1) {
             status = await this._blockchain.resetTo(msg.block);
-        } else {
-            // Put block into blockchain.
-            status = await this._blockchain.pushBlock(msg.block, this._behavior === Core.Behavior.Full || !this._syncing);
         }
 
         // TODO send reject message if we don't like the block

@@ -160,7 +160,7 @@ class Blockchain extends Observable {
             const minKey = Math.min.apply(null, keys);
             delete this._checkpoints[minKey];
         }
-        const checkpoint = Accounts.createVolatile();
+        const checkpoint = await Accounts.createVolatile();
         await checkpoint._tree._store.copy(accounts._tree._store); // TODO make this nicer
         this._checkpoints[height] = checkpoint;
     }
